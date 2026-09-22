@@ -24,7 +24,7 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 - **Live Mac health:** processor load, memory use, startup-disk use, and uptime
 - **Copilot session desk:** active and recent GitHub Copilot project sessions, repositories, branches, and activity
 - **Attention state:** visually inverts a session when Copilot is waiting for an answer
-- **Local weather:** keyless weather from [Open-Meteo](https://open-meteo.com/), defaulting to Marietta, Georgia 30066
+- **Local weather:** keyless temperature data from [Open-Meteo](https://open-meteo.com/) with fresh U.S. sky observations from the [National Weather Service](https://www.weather.gov/), defaulting to Marietta, Georgia 30066
 - **Glanceable weather artwork:** distinct MacPaint-style scenes for sky coverage, day and night, fog, drizzle, rain, snow, and thunderstorms
 - **Dedicated-display mode:** automatically fills the first secondary display at its native resolution
 - **Native menu-bar controls:** reopen the dashboard, switch display modes, change settings, or quit
@@ -34,7 +34,7 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 
 System metrics and Copilot session metadata are read locally. AgentMon only inspects the metadata needed to identify a project, branch, recency, and state. It does not upload project names, prompts, source code, or session content.
 
-The configured location is sent to Open-Meteo's geocoding and forecast APIs. No API key is required.
+The configured location is sent to the weather providers. Open-Meteo supplies temperature and worldwide fallback conditions. U.S. ZIP codes are resolved through [Zippopotam.us](https://www.zippopotam.us/), and fresh sky conditions come from nearby National Weather Service observation stations. No API keys are required.
 
 ## Weather artwork
 

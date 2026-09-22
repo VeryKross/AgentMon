@@ -123,6 +123,29 @@ import Testing
   #expect(WeatherCode.description(for: 95, cloudCover: 20) == "Thunderstorms")
 }
 
+@Test func mapsObservedWeatherDescriptions() throws {
+  let mostlyClear = try #require(ObservedWeatherCondition(description: "Mostly Clear"))
+  #expect(mostlyClear.description(isDay: true) == "Mostly sunny")
+  #expect(mostlyClear.description(isDay: false) == "Mostly clear")
+  #expect(mostlyClear.artwork(isDay: true) == .mostlySunny)
+
+  #expect(ObservedWeatherCondition(description: "Partly Cloudy") == .partlyCloudy)
+  #expect(ObservedWeatherCondition(description: "Mostly Cloudy") == .mostlyCloudy)
+  #expect(ObservedWeatherCondition(description: "Fog/Mist") == .fog)
+  #expect(ObservedWeatherCondition(description: "Light Rain") == .rain)
+  #expect(ObservedWeatherCondition(description: "Snow Showers") == .snow)
+  #expect(ObservedWeatherCondition(description: "Thunderstorm in Vicinity") == .thunderstorm)
+  #expect(ObservedWeatherCondition(description: "Unknown Precipitation") == nil)
+}
+
+@Test func recognizesUSZipLocations() {
+  #expect(WeatherLocationParser.usZipCode(from: "30066") == "30066")
+  #expect(WeatherLocationParser.usZipCode(from: " 30066 ") == "30066")
+  #expect(WeatherLocationParser.usZipCode(from: "30066-1234") == "30066")
+  #expect(WeatherLocationParser.usZipCode(from: "Marietta, Georgia") == nil)
+  #expect(WeatherLocationParser.usZipCode(from: "SW1A 1AA") == nil)
+}
+
 @Test func mapsEveryWeatherFamilyToDistinctArtwork() {
   #expect(WeatherCode.artwork(for: 0, cloudCover: 0, isDay: true) == .sunny)
   #expect(WeatherCode.artwork(for: 0, cloudCover: 0, isDay: false) == .clearNight)

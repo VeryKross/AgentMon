@@ -19,13 +19,15 @@ struct SettingsView: View {
       }
 
       Section("Weather") {
-        TextField("Town or city", text: $weatherLocation)
+        TextField("Town, city, or ZIP code", text: $weatherLocation)
           .textFieldStyle(.roundedBorder)
 
         HStack {
-          Text("Weather data is provided by Open-Meteo.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+          Text(
+            "Open-Meteo forecast data; U.S. conditions observed by the National Weather Service."
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
           Spacer()
           Button("Refresh Weather") {
             dashboard.refresh(forceWeather: true)
@@ -36,7 +38,7 @@ struct SettingsView: View {
 
       Section("Privacy") {
         Text(
-          "System and Copilot session status are read locally. AgentMon never sends project names, prompts, or code to the weather service."
+          "System and Copilot session status are read locally. AgentMon sends only the configured location to weather and geocoding providers—never project names, prompts, or code."
         )
         .font(.caption)
         .foregroundStyle(.secondary)

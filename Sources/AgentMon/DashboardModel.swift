@@ -159,6 +159,7 @@ final class DashboardModel: ObservableObject {
       weatherCode: 3,
       cloudCover: 92,
       isDay: true,
+      observedCondition: nil,
       fetchedAt: now
     )
     weatherError = nil

@@ -88,10 +88,14 @@ struct WeatherSnapshot: Equatable, Sendable {
   let weatherCode: Int
   let cloudCover: Double
   let isDay: Bool
+  let observedCondition: ObservedWeatherCondition?
   let fetchedAt: Date
 
   var condition: String {
-    WeatherCode.description(
+    if let observedCondition {
+      return observedCondition.description(isDay: isDay)
+    }
+    return WeatherCode.description(
       for: weatherCode,
       cloudCover: cloudCover,
       isDay: isDay
@@ -99,11 +103,85 @@ struct WeatherSnapshot: Equatable, Sendable {
   }
 
   var artwork: WeatherArtwork {
-    WeatherCode.artwork(
+    if let observedCondition {
+      return observedCondition.artwork(isDay: isDay)
+    }
+    return WeatherCode.artwork(
       for: weatherCode,
       cloudCover: cloudCover,
       isDay: isDay
     )
+  }
+}
+
+enum ObservedWeatherCondition: Equatable, Sendable {
+  case clear
+  case mostlyClear
+  case partlyCloudy
+  case mostlyCloudy
+  case overcast
+  case fog
+  case drizzle
+  case rain
+  case snow
+  case thunderstorm
+
+  init?(description: String) {
+    let value = description.lowercased()
+
+    if value.contains("thunder") {
+      self = .thunderstorm
+    } else if value.contains("snow") || value.contains("flurr") || value.contains("ice pellet") {
+      self = .snow
+    } else if value.contains("rain") || value.contains("shower") {
+      self = .rain
+    } else if value.contains("drizzle") {
+      self = .drizzle
+    } else if value.contains("fog") || value.contains("mist") || value.contains("haze") {
+      self = .fog
+    } else if value.contains("mostly cloudy") || value.contains("broken") {
+      self = .mostlyCloudy
+    } else if value.contains("partly cloudy") || value.contains("scattered") {
+      self = .partlyCloudy
+    } else if value.contains("mostly clear") || value.contains("few cloud") {
+      self = .mostlyClear
+    } else if value.contains("overcast") || value == "cloudy" {
+      self = .overcast
+    } else if value.contains("clear") || value.contains("fair") || value.contains("sunny") {
+      self = .clear
+    } else {
+      return nil
+    }
+  }
+
+  func description(isDay: Bool) -> String {
+    switch self {
+    case .clear: isDay ? "Sunny" : "Clear"
+    case .mostlyClear: isDay ? "Mostly sunny" : "Mostly clear"
+    case .partlyCloudy: "Partly cloudy"
+    case .mostlyCloudy: "Mostly cloudy"
+    case .overcast: "Overcast"
+    case .fog: "Fog"
+    case .drizzle: "Drizzle"
+    case .rain: "Rain"
+    case .snow: "Snow"
+    case .thunderstorm: "Thunderstorms"
+    }
+  }
+
+  func artwork(isDay: Bool) -> WeatherArtwork {
+    switch self {
+    case .clear: isDay ? .sunny : .clearNight
+    case .mostlyClear: isDay ? .mostlySunny : .mostlyClearNight
+    case .partlyCloudy: isDay ? .partlyCloudyDay : .partlyCloudyNight
+    case .mostlyCloudy: isDay ? .mostlyCloudyDay : .mostlyCloudyNight
+    case .overcast: .overcast
+    case .fog: .fog
+    case .drizzle: .drizzle
+    case .rain: .rain
+    case .snow: .snow
+    case .thunderstorm: .thunderstorm
+    }
   }
 }
 
