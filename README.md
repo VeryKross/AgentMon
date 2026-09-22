@@ -53,7 +53,13 @@ To sign the app and disk image with an installed Developer ID certificate:
 CODESIGN_IDENTITY="Developer ID Application: Your Company (TEAMID)" make dmg
 ```
 
-Developer ID builds use Apple's hardened runtime and secure timestamps. Signing alone does not notarize the disk image; public release downloads should also be submitted to Apple's notarization service and stapled.
+Developer ID builds use Apple's hardened runtime and secure timestamps. To also submit and staple both the app and disk image using a saved `notarytool` Keychain profile:
+
+```sh
+CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+NOTARY_PROFILE="AgentMonNotary" \
+make dmg
+```
 
 To build only the application bundle:
 

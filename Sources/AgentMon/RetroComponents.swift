@@ -136,6 +136,7 @@ struct BarHistory: View {
             )
         }
       }
+      .frame(maxHeight: .infinity, alignment: .bottom)
     }
     .accessibilityHidden(true)
   }
