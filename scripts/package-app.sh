@@ -54,5 +54,15 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_DIR"
+if [ "$SIGNING_IDENTITY" = "-" ]; then
+  codesign --force --deep --sign - "$APP_DIR"
+else
+  codesign \
+    --force \
+    --deep \
+    --options runtime \
+    --timestamp \
+    --sign "$SIGNING_IDENTITY" \
+    "$APP_DIR"
+fi
 echo "Built $APP_DIR"

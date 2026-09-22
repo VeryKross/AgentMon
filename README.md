@@ -45,7 +45,15 @@ make dmg
 open dist/AgentMon.dmg
 ```
 
-Drag **AgentMon** into the **Applications** shortcut in the disk image, then launch it from Applications. Locally built bundles are ad-hoc signed. Developer ID signing and notarized release downloads can be added once signing credentials are configured.
+Drag **AgentMon** into the **Applications** shortcut in the disk image, then launch it from Applications. Without a signing identity, locally built bundles are ad-hoc signed.
+
+To sign the app and disk image with an installed Developer ID certificate:
+
+```sh
+CODESIGN_IDENTITY="Developer ID Application: Your Company (TEAMID)" make dmg
+```
+
+Developer ID builds use Apple's hardened runtime and secure timestamps. Signing alone does not notarize the disk image; public release downloads should also be submitted to Apple's notarization service and stapled.
 
 To build only the application bundle:
 

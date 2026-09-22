@@ -23,4 +23,8 @@ hdiutil create \
   -format UDZO \
   "$DMG_PATH"
 
+if [ "${CODESIGN_IDENTITY:--}" != "-" ]; then
+  codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$DMG_PATH"
+fi
+
 echo "Built $DMG_PATH"
