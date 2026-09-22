@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/VeryKross/AgentMon/actions/workflows/ci.yml"><img src="https://github.com/VeryKross/AgentMon/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/VeryKross/AgentMon/releases/latest"><img src="https://img.shields.io/github/v/release/VeryKross/AgentMon" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-black" alt="macOS 14 or later">
   <img src="https://img.shields.io/badge/Swift-6.3-orange" alt="Swift 6.3">
 </p>
@@ -36,7 +37,13 @@ The configured location is sent to Open-Meteo's geocoding and forecast APIs. No 
 
 ## Install
 
-AgentMon currently builds from source and requires macOS 14 or later with Xcode 16 or later installed.
+Download the signed and notarized [`AgentMon.dmg`](https://github.com/VeryKross/AgentMon/releases/latest/download/AgentMon.dmg) from the latest release. Open the disk image, then drag **AgentMon** into **Applications**.
+
+Release builds are signed with **Developer ID Application: Ken Ross (KRFKA47WU3)**, notarized by Apple, and stapled for offline Gatekeeper verification. A SHA-256 checksum is published beside each DMG.
+
+### Build from source
+
+Source builds require macOS 14 or later with Xcode 16 or later installed.
 
 ```sh
 git clone https://github.com/VeryKross/AgentMon.git
@@ -45,7 +52,7 @@ make dmg
 open dist/AgentMon.dmg
 ```
 
-Drag **AgentMon** into the **Applications** shortcut in the disk image, then launch it from Applications. Without a signing identity, locally built bundles are ad-hoc signed.
+Without a signing identity, locally built bundles are ad-hoc signed.
 
 To sign the app and disk image with an installed Developer ID certificate:
 
