@@ -27,7 +27,10 @@ struct WeatherService {
     components.queryItems = [
       URLQueryItem(name: "latitude", value: String(place.latitude)),
       URLQueryItem(name: "longitude", value: String(place.longitude)),
-      URLQueryItem(name: "current", value: "temperature_2m,weather_code,is_day"),
+      URLQueryItem(
+        name: "current",
+        value: "temperature_2m,weather_code,cloud_cover,is_day"
+      ),
       URLQueryItem(name: "temperature_unit", value: "fahrenheit"),
       URLQueryItem(name: "timezone", value: "auto"),
     ]
@@ -41,6 +44,7 @@ struct WeatherService {
       location: [place.name, place.admin1].compactMap { $0 }.joined(separator: ", "),
       temperature: forecast.current.temperature,
       weatherCode: forecast.current.weatherCode,
+      cloudCover: forecast.current.cloudCover,
       isDay: forecast.current.isDay == 1,
       fetchedAt: .now
     )
@@ -90,11 +94,13 @@ private struct ForecastResponse: Decodable {
 private struct CurrentWeather: Decodable {
   let temperature: Double
   let weatherCode: Int
+  let cloudCover: Double
   let isDay: Int
 
   enum CodingKeys: String, CodingKey {
     case temperature = "temperature_2m"
     case weatherCode = "weather_code"
+    case cloudCover = "cloud_cover"
     case isDay = "is_day"
   }
 }

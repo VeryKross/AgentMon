@@ -4,6 +4,8 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 CONFIGURATION=${CONFIGURATION:-release}
 SIGNING_IDENTITY=${CODESIGN_IDENTITY:--}
+APP_VERSION=${APP_VERSION:-0.1.1}
+BUILD_NUMBER=${BUILD_NUMBER:-2}
 APP_DIR="$ROOT_DIR/.build/AgentMon.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
@@ -17,7 +19,7 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$ROOT_DIR/.build/$CONFIGURATION/AgentMon" "$MACOS_DIR/AgentMon"
 cp "$ROOT_DIR/Assets/AgentMon.icns" "$RESOURCES_DIR/AgentMon.icns"
 
-cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
+cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -41,9 +43,9 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.developer-tools</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>$APP_VERSION</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$BUILD_NUMBER</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>

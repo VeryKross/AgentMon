@@ -157,6 +157,7 @@ final class DashboardModel: ObservableObject {
       location: "Marietta, Georgia",
       temperature: 76,
       weatherCode: 3,
+      cloudCover: 92,
       isDay: true,
       fetchedAt: now
     )

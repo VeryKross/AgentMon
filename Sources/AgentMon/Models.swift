@@ -86,26 +86,69 @@ struct WeatherSnapshot: Equatable, Sendable {
   let location: String
   let temperature: Double
   let weatherCode: Int
+  let cloudCover: Double
   let isDay: Bool
   let fetchedAt: Date
 
   var condition: String {
-    WeatherCode.description(for: weatherCode)
+    WeatherCode.description(
+      for: weatherCode,
+      cloudCover: cloudCover,
+      isDay: isDay
+    )
+  }
+
+  var showsClouds: Bool {
+    cloudCover >= 13 || weatherCode != 0
   }
 }
 
 enum WeatherCode {
-  static func description(for code: Int) -> String {
+  static func description(
+    for code: Int,
+    cloudCover: Double? = nil,
+    isDay: Bool = true
+  ) -> String {
     switch code {
-    case 0: "Clear"
-    case 1, 2: "Partly cloudy"
-    case 3: "Overcast"
-    case 45, 48: "Fog"
-    case 51, 53, 55, 56, 57: "Drizzle"
-    case 61, 63, 65, 66, 67, 80, 81, 82: "Rain"
-    case 71, 73, 75, 77, 85, 86: "Snow"
-    case 95, 96, 99: "Thunderstorms"
-    default: "Unknown"
+    case 0...3:
+      if let cloudCover {
+        return skyDescription(cloudCover: cloudCover, isDay: isDay)
+      }
+      return wmoSkyDescription(for: code, isDay: isDay)
+    case 45, 48: return "Fog"
+    case 51, 53, 55, 56, 57: return "Drizzle"
+    case 61, 63, 65, 66, 67, 80, 81, 82: return "Rain"
+    case 71, 73, 75, 77, 85, 86: return "Snow"
+    case 95, 96, 99: return "Thunderstorms"
+    default: return "Unknown"
+    }
+  }
+
+  private static func skyDescription(cloudCover: Double, isDay: Bool) -> String {
+    switch min(max(cloudCover, 0), 100) {
+    case 0..<13:
+      isDay ? "Sunny" : "Clear"
+    case 13..<38:
+      isDay ? "Mostly sunny" : "Mostly clear"
+    case 38..<63:
+      "Partly cloudy"
+    case 63..<88:
+      "Mostly cloudy"
+    default:
+      "Overcast"
+    }
+  }
+
+  private static func wmoSkyDescription(for code: Int, isDay: Bool) -> String {
+    switch code {
+    case 0:
+      isDay ? "Sunny" : "Clear"
+    case 1:
+      isDay ? "Mostly sunny" : "Mostly clear"
+    case 2:
+      "Partly cloudy"
+    default:
+      "Overcast"
     }
   }
 }

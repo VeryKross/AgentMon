@@ -99,7 +99,24 @@ import Testing
 }
 
 @Test func mapsWeatherCodes() {
-  #expect(WeatherCode.description(for: 0) == "Clear")
+  #expect(WeatherCode.description(for: 0) == "Sunny")
+  #expect(WeatherCode.description(for: 1) == "Mostly sunny")
+  #expect(WeatherCode.description(for: 1, isDay: false) == "Mostly clear")
+  #expect(WeatherCode.description(for: 2) == "Partly cloudy")
   #expect(WeatherCode.description(for: 63) == "Rain")
   #expect(WeatherCode.description(for: 95) == "Thunderstorms")
+}
+
+@Test func describesSkyFromCloudCover() {
+  #expect(WeatherCode.description(for: 0, cloudCover: 0) == "Sunny")
+  #expect(WeatherCode.description(for: 0, cloudCover: 20) == "Mostly sunny")
+  #expect(WeatherCode.description(for: 1, cloudCover: 50) == "Partly cloudy")
+  #expect(WeatherCode.description(for: 2, cloudCover: 75) == "Mostly cloudy")
+  #expect(WeatherCode.description(for: 3, cloudCover: 95) == "Overcast")
+  #expect(WeatherCode.description(for: 0, cloudCover: 20, isDay: false) == "Mostly clear")
+}
+
+@Test func precipitationTakesPriorityOverCloudCover() {
+  #expect(WeatherCode.description(for: 63, cloudCover: 10) == "Rain")
+  #expect(WeatherCode.description(for: 95, cloudCover: 20) == "Thunderstorms")
 }

@@ -445,7 +445,7 @@ private struct WeatherGlyph: View {
         context.stroke(ray, with: .color(ink), lineWidth: 2)
       }
 
-      if weather == nil || weather?.weatherCode != 0 {
+      if weather == nil || weather?.showsClouds == true {
         var cloud = Path()
         cloud.move(to: CGPoint(x: size.width * 0.17, y: size.height * 0.78))
         cloud.addCurve(
