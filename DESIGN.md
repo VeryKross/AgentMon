@@ -154,12 +154,17 @@ The dashboard has no navigation. Its top strip establishes place and time using 
 
 Every instrument is a fixed window with striped title chrome, centered title, close and zoom furniture, strong outer rule, and isolated hard-offset depth. Emphasized states replace stripes with solid Carbon Ink.
 
+### Weather Artwork
+
+Weather uses a complete one-bit scene vocabulary rather than one generic icon. Cloud mass increases visibly from mostly sunny through overcast; clear, mostly clear, partly cloudy, and mostly cloudy receive day/night celestial variants. Fog uses horizontal visibility bands, drizzle uses sparse dots, rain uses long diagonal strokes, snow uses asterisk flakes, and thunderstorms combine a heavy cloud, rain, and a bold lightning bolt.
+
 ## Do's and Don'ts
 
 ### Do:
 
 - **Do** preserve the one-bit palette and communicate state redundantly.
 - **Do** draw distinctive icons with crisp paths and stipple marks.
+- **Do** preserve a unique silhouette and precipitation grammar for every weather family.
 - **Do** keep motion low-frequency, brief, and tied to live state.
 - **Do** maintain the approved 1280×720 hierarchy.
 

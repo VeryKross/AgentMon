@@ -98,8 +98,50 @@ struct WeatherSnapshot: Equatable, Sendable {
     )
   }
 
-  var showsClouds: Bool {
-    cloudCover >= 13 || weatherCode != 0
+  var artwork: WeatherArtwork {
+    WeatherCode.artwork(
+      for: weatherCode,
+      cloudCover: cloudCover,
+      isDay: isDay
+    )
+  }
+}
+
+enum WeatherArtwork: String, CaseIterable, Sendable {
+  case sunny
+  case clearNight
+  case mostlySunny
+  case mostlyClearNight
+  case partlyCloudyDay
+  case partlyCloudyNight
+  case mostlyCloudyDay
+  case mostlyCloudyNight
+  case overcast
+  case fog
+  case drizzle
+  case rain
+  case snow
+  case thunderstorm
+  case unknown
+
+  var displayName: String {
+    switch self {
+    case .sunny: "Sunny"
+    case .clearNight: "Clear night"
+    case .mostlySunny: "Mostly sunny"
+    case .mostlyClearNight: "Mostly clear night"
+    case .partlyCloudyDay: "Partly cloudy"
+    case .partlyCloudyNight: "Partly cloudy night"
+    case .mostlyCloudyDay: "Mostly cloudy"
+    case .mostlyCloudyNight: "Mostly cloudy night"
+    case .overcast: "Overcast"
+    case .fog: "Fog"
+    case .drizzle: "Drizzle"
+    case .rain: "Rain"
+    case .snow: "Snow"
+    case .thunderstorm: "Thunderstorm"
+    case .unknown: "Unknown"
+    }
   }
 }
 
@@ -121,6 +163,29 @@ enum WeatherCode {
     case 71, 73, 75, 77, 85, 86: return "Snow"
     case 95, 96, 99: return "Thunderstorms"
     default: return "Unknown"
+    }
+  }
+
+  static func artwork(
+    for code: Int,
+    cloudCover: Double,
+    isDay: Bool
+  ) -> WeatherArtwork {
+    switch code {
+    case 0...3:
+      return skyArtwork(cloudCover: cloudCover, isDay: isDay)
+    case 45, 48:
+      return .fog
+    case 51, 53, 55, 56, 57:
+      return .drizzle
+    case 61, 63, 65, 66, 67, 80, 81, 82:
+      return .rain
+    case 71, 73, 75, 77, 85, 86:
+      return .snow
+    case 95, 96, 99:
+      return .thunderstorm
+    default:
+      return .unknown
     }
   }
 
@@ -149,6 +214,21 @@ enum WeatherCode {
       "Partly cloudy"
     default:
       "Overcast"
+    }
+  }
+
+  private static func skyArtwork(cloudCover: Double, isDay: Bool) -> WeatherArtwork {
+    switch min(max(cloudCover, 0), 100) {
+    case 0..<13:
+      isDay ? .sunny : .clearNight
+    case 13..<38:
+      isDay ? .mostlySunny : .mostlyClearNight
+    case 38..<63:
+      isDay ? .partlyCloudyDay : .partlyCloudyNight
+    case 63..<88:
+      isDay ? .mostlyCloudyDay : .mostlyCloudyNight
+    default:
+      .overcast
     }
   }
 }

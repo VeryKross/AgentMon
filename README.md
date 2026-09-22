@@ -25,6 +25,7 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 - **Copilot session desk:** active and recent GitHub Copilot project sessions, repositories, branches, and activity
 - **Attention state:** visually inverts a session when Copilot is waiting for an answer
 - **Local weather:** keyless weather from [Open-Meteo](https://open-meteo.com/), defaulting to Marietta, Georgia 30066
+- **Glanceable weather artwork:** distinct MacPaint-style scenes for sky coverage, day and night, fog, drizzle, rain, snow, and thunderstorms
 - **Dedicated-display mode:** automatically fills the first secondary display at its native resolution
 - **Native menu-bar controls:** reopen the dashboard, switch display modes, change settings, or quit
 - **One-bit design:** Monaco typography, stipple patterns, MacPaint-style artwork, and crisp structural shadows
@@ -34,6 +35,12 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 System metrics and Copilot session metadata are read locally. AgentMon only inspects the metadata needed to identify a project, branch, recency, and state. It does not upload project names, prompts, source code, or session content.
 
 The configured location is sent to Open-Meteo's geocoding and forecast APIs. No API key is required.
+
+## Weather artwork
+
+Every condition family has its own one-bit scene, including progressively heavier cloud coverage, day and night variants, fog bands, drizzle, rain, snow, and lightning.
+
+![AgentMon's complete MacPaint-style weather artwork system](docs/images/weather-artwork-gallery.png)
 
 ## Install
 
@@ -126,6 +133,7 @@ Sources/AgentMon/
 ├── SystemMonitor.swift        # Native CPU, memory, disk, and uptime metrics
 ├── CopilotSessionMonitor.swift
 ├── WeatherService.swift
+├── WeatherGlyph.swift          # One-bit condition artwork
 ├── RetroComponents.swift
 └── RetroTheme.swift
 ```

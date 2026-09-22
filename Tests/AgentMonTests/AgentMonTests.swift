@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import AgentMon
@@ -119,4 +121,65 @@ import Testing
 @Test func precipitationTakesPriorityOverCloudCover() {
   #expect(WeatherCode.description(for: 63, cloudCover: 10) == "Rain")
   #expect(WeatherCode.description(for: 95, cloudCover: 20) == "Thunderstorms")
+}
+
+@Test func mapsEveryWeatherFamilyToDistinctArtwork() {
+  #expect(WeatherCode.artwork(for: 0, cloudCover: 0, isDay: true) == .sunny)
+  #expect(WeatherCode.artwork(for: 0, cloudCover: 0, isDay: false) == .clearNight)
+  #expect(WeatherCode.artwork(for: 0, cloudCover: 20, isDay: true) == .mostlySunny)
+  #expect(WeatherCode.artwork(for: 0, cloudCover: 20, isDay: false) == .mostlyClearNight)
+  #expect(WeatherCode.artwork(for: 1, cloudCover: 50, isDay: true) == .partlyCloudyDay)
+  #expect(WeatherCode.artwork(for: 1, cloudCover: 50, isDay: false) == .partlyCloudyNight)
+  #expect(WeatherCode.artwork(for: 2, cloudCover: 75, isDay: true) == .mostlyCloudyDay)
+  #expect(WeatherCode.artwork(for: 2, cloudCover: 75, isDay: false) == .mostlyCloudyNight)
+  #expect(WeatherCode.artwork(for: 3, cloudCover: 95, isDay: true) == .overcast)
+  #expect(WeatherCode.artwork(for: 45, cloudCover: 100, isDay: true) == .fog)
+  #expect(WeatherCode.artwork(for: 53, cloudCover: 100, isDay: true) == .drizzle)
+  #expect(WeatherCode.artwork(for: 63, cloudCover: 100, isDay: true) == .rain)
+  #expect(WeatherCode.artwork(for: 73, cloudCover: 100, isDay: true) == .snow)
+  #expect(WeatherCode.artwork(for: 95, cloudCover: 100, isDay: true) == .thunderstorm)
+  #expect(WeatherCode.artwork(for: -1, cloudCover: 0, isDay: true) == .unknown)
+}
+
+@Test @MainActor func rendersEveryWeatherArtwork() throws {
+  let renderer = ImageRenderer(content: WeatherArtworkGallery())
+  renderer.proposedSize = ProposedViewSize(width: 1280, height: 720)
+
+  let image = try #require(renderer.nsImage)
+  let tiff = try #require(image.tiffRepresentation)
+  let bitmap = try #require(NSBitmapImageRep(data: tiff))
+  let png = try #require(bitmap.representation(using: .png, properties: [:]))
+
+  if let outputPath = ProcessInfo.processInfo.environment["AGENTMON_ARTWORK_SNAPSHOT"] {
+    try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+  }
+
+  #expect(image.size.width == 1280)
+  #expect(image.size.height == 720)
+}
+
+private struct WeatherArtworkGallery: View {
+  private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 5)
+
+  var body: some View {
+    LazyVGrid(columns: columns, spacing: 8) {
+      ForEach(WeatherArtwork.allCases, id: \.self) { artwork in
+        VStack(spacing: 5) {
+          WeatherGlyph(artwork: artwork, label: artwork.displayName)
+            .frame(width: 108, height: 100)
+          Text(artwork.displayName)
+            .font(RetroTheme.font(size: 9, weight: .bold))
+            .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 206)
+        .background(RetroTheme.paper)
+        .overlay {
+          Rectangle().stroke(RetroTheme.ink, lineWidth: 2)
+        }
+      }
+    }
+    .padding(18)
+    .frame(width: 1280, height: 720)
+    .background(DitherPattern())
+  }
 }
