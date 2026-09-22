@@ -187,7 +187,7 @@ private struct MetricBlock: View {
       }
 
       if let history {
-        HStack(spacing: 10) {
+        HStack(alignment: .bottom, spacing: 10) {
           SegmentedMeter(value: value, segments: 14)
           BarHistory(values: history)
             .frame(width: 74, height: 24)
