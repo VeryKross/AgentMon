@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <pattern id="dither" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="8" height="8" fill="#0b0d0b"/>
+      <rect x="12" y="12" width="8" height="8" fill="#0b0d0b"/>
+    </pattern>
+    <clipPath id="tile">
+      <rect x="32" y="32" width="960" height="960" rx="214"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#tile)">
+    <rect x="32" y="32" width="960" height="960" fill="#aba99a"/>
+    <rect x="32" y="32" width="960" height="960" fill="url(#dither)" opacity=".36"/>
+
+    <rect x="212" y="174" width="612" height="700" rx="58" fill="#0b0d0b" opacity=".75" transform="translate(22 26)"/>
+    <rect x="212" y="174" width="612" height="700" rx="58" fill="#e8e6d6" stroke="#0b0d0b" stroke-width="28"/>
+
+    <path d="M286 248h464v348H286z" fill="#0b0d0b"/>
+    <rect x="312" y="274" width="412" height="296" rx="18" fill="#e8e6d6"/>
+
+    <rect x="378" y="362" width="42" height="42" fill="#0b0d0b"/>
+    <rect x="618" y="362" width="42" height="42" fill="#0b0d0b"/>
+
+    <path d="M392 466h52v26h136v-26h52v34h-28v28H420v-28h-28z" fill="#0b0d0b"/>
+
+    <rect x="282" y="646" width="326" height="34" rx="5" fill="#0b0d0b"/>
+    <rect x="663" y="646" width="70" height="34" rx="5" fill="#0b0d0b"/>
+
+    <rect x="304" y="736" width="414" height="28" fill="#0b0d0b"/>
+    <rect x="668" y="794" width="52" height="28" fill="#0b0d0b"/>
+
+    <circle cx="769" cy="225" r="54" fill="#e8e6d6" stroke="#0b0d0b" stroke-width="18"/>
+    <path d="M769 193v34l25 18" fill="none" stroke="#0b0d0b" stroke-width="18" stroke-linecap="square"/>
+    <rect x="749" y="153" width="40" height="18" fill="#0b0d0b"/>
+  </g>
+
+  <rect x="32" y="32" width="960" height="960" rx="214" fill="none" stroke="#0b0d0b" stroke-width="30"/>
+</svg>
