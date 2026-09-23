@@ -62,18 +62,39 @@ struct DashboardView: View {
 }
 
 private struct DesktopMenuBar: View {
+  @Environment(\.openSettings) private var openSettings
+
   var body: some View {
     TimelineView(.periodic(from: .now, by: 1)) { timeline in
       HStack(spacing: 24) {
         MiniMacIcon(mood: .happy)
           .frame(width: 28, height: 33)
 
-        Text("AgentMon")
-          .font(RetroTheme.font(size: 16, weight: .bold))
+        Menu {
+          Button("Settings…") {
+            openSettings()
+          }
+          Divider()
+          Button("Quit AgentMon") {
+            NSApplication.shared.terminate(nil)
+          }
+        } label: {
+          Text("AgentMon")
+            .font(RetroTheme.font(size: 16, weight: .bold))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
 
-        Text("Desk")
-        Text("Monitors")
-        Text("Window")
+        Button("Desk") {
+          DashboardWindowController.shared.showDashboard()
+        }
+        Button("Monitors") {
+          DashboardWindowController.shared.fillSecondaryDisplay()
+        }
+        Button("Window") {
+          DashboardWindowController.shared.useWindowedMode()
+        }
+        .buttonStyle(.plain)
 
         Spacer()
 
@@ -82,6 +103,7 @@ private struct DesktopMenuBar: View {
           .frame(width: 160, alignment: .trailing)
       }
       .font(RetroTheme.font(size: 15))
+      .buttonStyle(.plain)
       .foregroundStyle(RetroTheme.ink)
       .padding(.horizontal, 13)
       .background(RetroTheme.paper)
