@@ -441,7 +441,6 @@ end;
 function InitializeUninstall: Boolean;
 var
   ErrorMessage: String;
-  CleanupParameters: String;
 begin
   Result := False;
   RemoveUserData := False;
@@ -456,35 +455,36 @@ begin
   if not ConfirmUserDataRemoval then
     Exit;
 
+  Result := True;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ErrorMessage: String;
+  CleanupParameters: String;
+begin
+  if CurUninstallStep <> usUninstall then
+    Exit;
+
+  // Inno reaches usUninstall only after its standard confirmation, so cancellation cannot trigger mutations.
+  if not CheckInstalledRelayNotRunning(ErrorMessage) then
+    RaiseException(ErrorMessage);
+
   CleanupParameters := '--uninstall-cleanup';
   if UninstallSilent then
     CleanupParameters := CleanupParameters + ' --silent';
   if not RunInstalledHelper(CleanupParameters, ErrorMessage) then
-  begin
-    if not UninstallSilent then
-      MsgBox(
-        'AgentMon Relay could not remove its owned startup or firewall configuration. ' +
-        'Uninstall was stopped before files were removed.' +
-        Chr(13) + Chr(10) + Chr(13) + Chr(10) + ErrorMessage,
-        mbError,
-        MB_OK);
-    Exit;
-  end;
+    RaiseException(
+      'AgentMon Relay could not remove its owned startup or firewall configuration. ' +
+      'Uninstall was stopped before files were removed.' +
+      Chr(13) + Chr(10) + Chr(13) + Chr(10) + ErrorMessage);
 
   if RemoveUserData then
   begin
     if not RunInstalledHelper('--remove-user-data', ErrorMessage) then
-    begin
-      if not UninstallSilent then
-        MsgBox(
-          'AgentMon Relay could not safely remove its pairing identity, credentials, and logs. ' +
-          'Uninstall was stopped before program files were removed.' +
-          Chr(13) + Chr(10) + Chr(13) + Chr(10) + ErrorMessage,
-          mbError,
-          MB_OK);
-      Exit;
-    end;
+      RaiseException(
+        'AgentMon Relay could not safely remove its pairing identity, credentials, and logs. ' +
+        'Uninstall was stopped before program files were removed.' +
+        Chr(13) + Chr(10) + Chr(13) + Chr(10) + ErrorMessage);
   end;
-
-  Result := True;
 end;
