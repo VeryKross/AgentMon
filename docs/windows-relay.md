@@ -77,6 +77,12 @@ Closing the management window hides it in the notification area; it does not
 quit the relay. Double-click the tray icon to reopen it. **Quit** stops polling,
 shuts down HTTPS, withdraws discovery, and exits.
 
+The application and installer share AgentMon's one-bit retro computer icon.
+The tray uses shape rather than color for status: empty ports when stopped,
+a solid connection when running, a dashed connection while waiting for a
+private network, and a broken connection on error. The same status is stated
+in text. Button sizes follow font metrics at high DPI rather than fixed heights.
+
 **Start AgentMon Relay when I sign in** is opt-in. It writes a quoted executable
 path plus `--background` into the current user's Windows `Run` registry key.
 The background launch starts the relay without opening its window. No machine
@@ -203,6 +209,11 @@ non-administrator installation, native accessible wizard controls, built-in
 uninstall registration, and scriptable x64/ARM64 packaging.
 The ZIP's timestamps/checksum can change between builds; reproducibility here
 means the same pinned build inputs, not byte-identical ZIP containers.
+
+The editable icon source and deterministic Windows ICO generator live in
+`Relay\AgentMon.Relay.Windows\Assets`. Run `Generate-RelayIcons.ps1` there when
+changing the artwork; the checked-in ICOs contain 16, 20, 24, 32, 48, 64, and
+256-pixel frames and need no external asset service.
 
 Windows CI runs native parsing, process-lock, DPAPI, network-profile,
 redaction, HTTPS/pinning/authentication, freshness, rate-limit, and shutdown

@@ -1,3 +1,4 @@
+#requires -Version 7.4
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$OldSetup,
@@ -29,10 +30,32 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'test-relay-installer-user.ps1') -Destination $stage
     $credential = [pscredential]::new("$env:COMPUTERNAME\$name", $password)
     $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    # Materialize the profile before starting a shell which caches known-folder paths.
+    $bootstrap = Start-Process -FilePath $windowsPowerShell -Credential $credential -LoadUserProfile `
+        -WorkingDirectory $stage -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'exit 0' -PassThru
+    if (-not $bootstrap.WaitForExit(90000)) {
+        Stop-Process -Id $bootstrap.Id -Force
+        throw 'Disposable profile initialization timed out.'
+    }
+    $profile = Get-CimInstance Win32_UserProfile -Filter "SID='$($user.SID.Value)'"
+    if (-not $profile -or (Split-Path $profile.LocalPath -Leaf) -ne $name) {
+        throw 'The new disposable profile could not be resolved.'
+    }
+    $localData = Join-Path $profile.LocalPath 'AppData\Local'
+    $environment = @{
+        USERPROFILE = $profile.LocalPath
+        USERNAME = $name
+        USERDOMAIN = $env:COMPUTERNAME
+        APPDATA = Join-Path $profile.LocalPath 'AppData\Roaming'
+        LOCALAPPDATA = $localData
+        TEMP = Join-Path $localData 'Temp'
+        TMP = Join-Path $localData 'Temp'
+    }
     $arguments = @('-NoProfile', '-NonInteractive', '-File', "`"$stage\test-relay-installer-user.ps1`"",
         '-OldSetup', "`"$stage\old.exe`"", '-NewSetup', "`"$stage\new.exe`"",
         '-ExpectedVersion', $ExpectedVersion, '-ExpectedUser', $name, '-DeveloperRoot', "`"$repo`"")
     $child = Start-Process -FilePath $windowsPowerShell -Credential $credential -LoadUserProfile `
+        -Environment $environment `
         -WorkingDirectory $stage -ArgumentList $arguments -PassThru `
         -RedirectStandardError (Join-Path $stage 'launch-error.txt') -RedirectStandardOutput (Join-Path $stage 'launch-output.txt')
     if (-not $child.WaitForExit(600000)) { throw 'Isolated installer suite timed out.' }
