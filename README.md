@@ -28,7 +28,7 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 - **Local weather:** keyless temperature data from [Open-Meteo](https://open-meteo.com/) with fresh U.S. sky observations from the [National Weather Service](https://www.weather.gov/), defaulting to Marietta, Georgia 30066
 - **Glanceable weather artwork:** distinct MacPaint-style scenes for sky coverage, day and night, fog, drizzle, rain, snow, and thunderstorms
 - **Dedicated-display mode:** automatically fills the first secondary display at its native resolution
-- **Native menu-bar controls:** reopen the dashboard, switch display modes, change settings, or quit
+- **Accessible controls:** the retro AgentMon menu and native menu-bar extra both open settings, switch display modes, or quit
 - **One-bit design:** Monaco typography, stipple patterns, MacPaint-style artwork, and crisp structural shadows
 
 ## Privacy
@@ -93,7 +93,7 @@ Use `make demo` to run the sanitized sample state used for repository screenshot
 
 ## Configuration
 
-Open the AgentMon menu-bar item and choose **Settings…** to change:
+Click **AgentMon** in the dashboard's retro menu strip and choose **Settings…**. The native macOS menu-bar extra provides the same settings and window controls when it is visible.
 
 - The computer name shown in the system window
 - Whether AgentMon fills the secondary display automatically
