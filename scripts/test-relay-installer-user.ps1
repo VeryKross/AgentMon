@@ -31,7 +31,11 @@ $env:TMP = $env:TEMP
 New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
 $localData = [Environment]::GetFolderPath(
     [Environment+SpecialFolder]::LocalApplicationData, [Environment+SpecialFolderOption]::Create)
-if (-not $localData -or $localData -ne $env:LOCALAPPDATA) { throw 'Disposable local data folder resolution failed.' }
+if (-not $localData -or $localData -ne $env:LOCALAPPDATA) {
+    $shellKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+    $shellLocal = Get-ItemPropertyValue $shellKey -Name 'Local AppData' -ErrorAction SilentlyContinue
+    throw "Disposable LocalAppData resolution failed: actual='$localData'; expected='$env:LOCALAPPDATA'; registry='$shellLocal'."
+}
 $install = Join-Path $localData 'Programs\AgentMonRelay'
 $data = Join-Path $localData 'AgentMonRelay'
 $exe = Join-Path $install 'AgentMonRelay.exe'
