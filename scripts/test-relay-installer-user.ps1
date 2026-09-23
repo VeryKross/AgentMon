@@ -15,13 +15,16 @@ if ($identity.Name.Split('\')[-1] -ne $ExpectedUser -or $ExpectedUser -notmatch 
     $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Installer tests require their disposable non-administrator account.'
 }
-$localData = [Environment]::GetFolderPath('LocalApplicationData')
+$localData = [Environment]::GetFolderPath(
+    [Environment+SpecialFolder]::LocalApplicationData, [Environment+SpecialFolderOption]::Create)
 $install = Join-Path $localData 'Programs\AgentMonRelay'
 $data = Join-Path $localData 'AgentMonRelay'
 $exe = Join-Path $install 'AgentMonRelay.exe'
 $startupKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $startupName = 'AgentMon Relay'
-$shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'AgentMon Relay.lnk'
+$programs = [Environment]::GetFolderPath(
+    [Environment+SpecialFolder]::Programs, [Environment+SpecialFolderOption]::Create)
+$shortcut = Join-Path $programs 'AgentMon Relay.lnk'
 $relayProcess = $null
 $result = Join-Path $PSScriptRoot 'result.txt'
 
@@ -160,7 +163,7 @@ try {
 catch {
     # Report test assertions, not values from settings or arbitrary process output.
     $message = if ($_.Exception.Data['InstallerAssertion']) { $_.Exception.Message } else { $_.Exception.GetType().Name }
-    "FAIL: $message" | Set-Content -LiteralPath $result
+    "FAIL (line $($_.InvocationInfo.ScriptLineNumber)): $message" | Set-Content -LiteralPath $result
     exit 1
 }
 finally {
