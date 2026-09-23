@@ -93,15 +93,27 @@ public sealed class TrayUiTests
             var controller = new FakeRelayController { View = CreateView("Stopped") };
             using var context = new RelayTrayContext(controller, startInBackground: true, queryWindowsIntegration: false);
 
-            Assert.AreEqual(SystemIcons.Application.Handle, context.CurrentTrayIcon.Handle);
+            var stoppedHandle = context.CurrentTrayIcon.Handle;
+            Assert.AreNotEqual(IntPtr.Zero, stoppedHandle);
+            Assert.AreEqual(RelayIconState.Stopped, context.CurrentIconState);
             controller.View = CreateView("Running");
             context.ManagementForm.RefreshView();
-            Assert.AreEqual(SystemIcons.Information.Handle, context.CurrentTrayIcon.Handle);
-            Assert.AreEqual(SystemIcons.Information.Handle, context.ManagementForm.Icon?.Handle);
+            var runningHandle = context.CurrentTrayIcon.Handle;
+            Assert.AreNotEqual(stoppedHandle, runningHandle);
+            Assert.AreEqual(RelayIconState.Running, context.CurrentIconState);
+            Assert.AreEqual(runningHandle, context.ManagementForm.Icon?.Handle);
+            controller.View = CreateView("Waiting for private network");
+            context.ManagementForm.RefreshView();
+            var waitingHandle = context.CurrentTrayIcon.Handle;
+            Assert.AreNotEqual(runningHandle, waitingHandle);
+            Assert.AreEqual(RelayIconState.Waiting, context.CurrentIconState);
+            Assert.AreEqual(waitingHandle, context.ManagementForm.Icon?.Handle);
             controller.View = CreateView("Error", error: "Safe error.");
             context.ManagementForm.RefreshView();
-            Assert.AreEqual(SystemIcons.Error.Handle, context.CurrentTrayIcon.Handle);
-            Assert.AreEqual(SystemIcons.Error.Handle, context.ManagementForm.Icon?.Handle);
+            var errorHandle = context.CurrentTrayIcon.Handle;
+            Assert.AreNotEqual(waitingHandle, errorHandle);
+            Assert.AreEqual(RelayIconState.Error, context.CurrentIconState);
+            Assert.AreEqual(errorHandle, context.ManagementForm.Icon?.Handle);
 
             await context.RequestQuitAsync();
         });

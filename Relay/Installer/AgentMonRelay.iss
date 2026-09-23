@@ -70,6 +70,7 @@ VersionInfoCompany=VeryKross
 VersionInfoDescription={#ProductName} installer
 UninstallDisplayName={#ProductName}
 UninstallDisplayIcon={app}\{#ProductExe}
+SetupIconFile=..\AgentMon.Relay.Windows\Assets\AgentMonRelay.ico
 CloseApplications=no
 RestartApplications=no
 RestartIfNeededByRun=no

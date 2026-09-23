@@ -11,6 +11,7 @@
     <AssemblyName>AgentMonRelay</AssemblyName>
     <RootNamespace>AgentMon.Relay.Windows</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>Assets\AgentMonRelay.ico</ApplicationIcon>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
@@ -20,6 +21,14 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <InternalsVisibleTo Include="AgentMon.Relay.Windows.Tests" />
+    <EmbeddedResource Include="Assets\AgentMonRelay.Stopped.ico"
+                      LogicalName="AgentMon.Relay.Windows.Assets.AgentMonRelay.Stopped.ico" />
+    <EmbeddedResource Include="Assets\AgentMonRelay.Running.ico"
+                      LogicalName="AgentMon.Relay.Windows.Assets.AgentMonRelay.Running.ico" />
+    <EmbeddedResource Include="Assets\AgentMonRelay.Waiting.ico"
+                      LogicalName="AgentMon.Relay.Windows.Assets.AgentMonRelay.Waiting.ico" />
+    <EmbeddedResource Include="Assets\AgentMonRelay.Error.ico"
+                      LogicalName="AgentMon.Relay.Windows.Assets.AgentMonRelay.Error.ico" />
   </ItemGroup>
   <Target Name="CopyRuntimeNotices" AfterTargets="Publish">
     <Copy SourceFiles="%(ResolvedRuntimePack.PackageDirectory)\THIRD-PARTY-NOTICES.TXT"

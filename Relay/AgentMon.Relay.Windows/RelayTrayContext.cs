@@ -7,6 +7,8 @@ internal sealed class RelayTrayContext : ApplicationContext
     private readonly RelayForm form;
     private readonly EventWaitHandle shutdownSignal;
     private readonly System.Windows.Forms.Timer shutdownTimer;
+    private readonly RelayIconSet relayIcons;
+    private RelayIconState currentIconState;
     private bool quitting;
 
     internal RelayTrayContext(
@@ -15,6 +17,7 @@ internal sealed class RelayTrayContext : ApplicationContext
         bool queryWindowsIntegration = true)
     {
         this.controller = controller;
+        relayIcons = RelayIconSet.Load();
         form = new RelayForm(controller, QuitAsync, queryWindowsIntegration);
         form.RelayStateChanged += UpdateStatusPresentation;
         shutdownSignal = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ShutdownEventName);
@@ -34,7 +37,7 @@ internal sealed class RelayTrayContext : ApplicationContext
         trayIcon = new NotifyIcon
         {
             ContextMenuStrip = menu,
-            Icon = SystemIcons.Application,
+            Icon = relayIcons[RelayIconState.Stopped],
             Text = "AgentMon Relay",
             Visible = true,
         };
@@ -48,7 +51,9 @@ internal sealed class RelayTrayContext : ApplicationContext
         }
     }
 
-    internal Icon CurrentTrayIcon => trayIcon.Icon ?? SystemIcons.Application;
+    internal Icon CurrentTrayIcon => trayIcon.Icon ?? relayIcons[RelayIconState.Stopped];
+
+    internal RelayIconState CurrentIconState => currentIconState;
 
     internal RelayForm ManagementForm => form;
 
@@ -62,8 +67,11 @@ internal sealed class RelayTrayContext : ApplicationContext
             shutdownTimer.Dispose();
             shutdownSignal.Dispose();
             trayIcon.Visible = false;
+            trayIcon.Icon = null;
+            form.Icon = null;
             trayIcon.Dispose();
             form.Dispose();
+            relayIcons.Dispose();
         }
 
         base.Dispose(disposing);
@@ -101,13 +109,14 @@ internal sealed class RelayTrayContext : ApplicationContext
 
     private void UpdateStatusPresentation(string state)
     {
-        var icon = state switch
+        currentIconState = state switch
         {
-            "Running" => SystemIcons.Information,
-            "Waiting for private network" => SystemIcons.Warning,
-            "Error" => SystemIcons.Error,
-            _ => SystemIcons.Application,
+            "Running" => RelayIconState.Running,
+            "Waiting for private network" => RelayIconState.Waiting,
+            "Error" => RelayIconState.Error,
+            _ => RelayIconState.Stopped,
         };
+        var icon = relayIcons[currentIconState];
         trayIcon.Icon = icon;
         trayIcon.Text = $"AgentMon Relay - {state}";
         form.Icon = icon;
