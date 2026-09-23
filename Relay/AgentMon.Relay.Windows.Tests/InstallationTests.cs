@@ -84,23 +84,31 @@ public sealed class InstallationTests
         var sentinel = Path.Combine(other, "keep.txt");
         File.WriteAllText(sentinel, "keep");
         var junction = Path.Combine(data, "redirect");
-        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        var start = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "powershell.exe",
             Arguments = $"-NoProfile -NonInteractive -Command \"New-Item -ItemType Junction -Path '{junction}' -Target '{other}' | Out-Null\"",
             UseShellExecute = false,
             CreateNoWindow = true,
-        })!;
-        Assert.IsTrue(process.WaitForExit(10000));
-        Assert.AreEqual(0, process.ExitCode);
+        };
+        start.Environment.Remove("PSModulePath");
+        using var process = System.Diagnostics.Process.Start(start)!;
         try
         {
+            if (!process.WaitForExit(60000))
+            {
+                process.Kill(entireProcessTree: true);
+                Assert.IsTrue(process.WaitForExit(10000), "Junction fixture process did not terminate.");
+                Assert.Fail("Junction fixture creation timed out.");
+            }
+            Assert.AreEqual(0, process.ExitCode, "Junction fixture creation failed.");
             Assert.ThrowsExactly<IOException>(() => InstallationMaintenance.DeleteDataDirectory(data));
             Assert.AreEqual("keep", File.ReadAllText(sentinel));
         }
         finally
         {
-            Directory.Delete(junction);
+            if (Directory.Exists(junction))
+                Directory.Delete(junction);
         }
     }
 }
