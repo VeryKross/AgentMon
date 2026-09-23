@@ -2,7 +2,7 @@ namespace AgentMon.Relay.Windows;
 
 internal static class RelayApplication
 {
-    private static readonly string DataDirectory =
+    internal static readonly string DataDirectory =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AgentMonRelay");
     internal static string LogDirectory => Path.Combine(DataDirectory, "Logs");
     private static readonly SafeLog Log = new(LogDirectory);
