@@ -58,12 +58,18 @@ function Run-Exe([string]$File, [string[]]$Arguments, [string]$Output = '') {
     $options = @{ FilePath = $File; ArgumentList = $Arguments; PassThru = $true }
     if ($Output) { $options.RedirectStandardOutput = $Output }
     $process = Start-Process @options
-    if (-not $process.WaitForExit(60000)) {
-        Stop-Process -Id $process.Id -Force
-        Assert-True $false 'Test process exceeded its deadline.'
+    # Windows PowerShell can lose redirected processes' exit codes unless the handle is retained.
+    $null = $process.Handle
+    try {
+        if (-not $process.WaitForExit(60000)) {
+            Stop-Process -Id $process.Id -Force
+            Assert-True $false 'Test process exceeded its deadline.'
+        }
+        $process.WaitForExit()
+        $process.Refresh()
+        return $process.ExitCode
     }
-    $process.Refresh()
-    return $process.ExitCode
+    finally { $process.Dispose() }
 }
 function Install-Setup([string]$File, [string]$Log, [bool]$ExpectSuccess = $true) {
     $code = Run-Exe $File @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$PSScriptRoot\$Log`"")
