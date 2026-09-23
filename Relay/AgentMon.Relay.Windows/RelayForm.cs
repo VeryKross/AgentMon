@@ -60,7 +60,7 @@ internal sealed class RelayForm : Form
         this.controller = controller;
         this.quitAsync = quitAsync;
 
-        Text = "AgentMon Relay";
+        Text = $"AgentMon Relay {InstallationMaintenance.Version}";
         AccessibleName = "AgentMon Relay management";
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(720, 720);
