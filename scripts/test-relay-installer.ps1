@@ -16,6 +16,7 @@ $name = 'AMRelayTest' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 $stage = Join-Path $env:ProgramData "AgentMonRelayInstallerTests\$name"
 $user = $null
 $child = $null
+$bootstrap = $null
 try {
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     $password = ConvertTo-SecureString ("AMr!9" + [guid]::NewGuid().ToString('N')) -AsPlainText -Force
@@ -72,10 +73,26 @@ try {
     if ($child.ExitCode -ne 0 -or -not $summary.StartsWith('PASS:')) { throw 'Installer acceptance failed.' }
 }
 finally {
-    if ($child -and -not $child.HasExited) { Stop-Process -Id $child.Id -Force }
+    foreach ($process in @($child, $bootstrap)) {
+        if ($process) {
+            if (-not $process.HasExited) {
+                Stop-Process -Id $process.Id -Force
+                if (-not $process.WaitForExit(10000)) { throw 'Disposable worker did not terminate.' }
+            }
+            $process.Dispose()
+        }
+    }
     if ($user) {
         # Match the exact disposable account SID, never a name/glob shared with real users.
         $profile = Get-CimInstance Win32_UserProfile -Filter "SID='$($user.SID.Value)'"
+        if ($profile -and $profile.Loaded) {
+            Write-Output 'Waiting for Windows to release the disposable test profile.'
+            $deadline = [DateTime]::UtcNow.AddSeconds(60)
+            do {
+                Start-Sleep -Milliseconds 500
+                $profile = Get-CimInstance Win32_UserProfile -Filter "SID='$($user.SID.Value)'"
+            } while ($profile -and $profile.Loaded -and [DateTime]::UtcNow -lt $deadline)
+        }
         if ($profile) {
             if ($profile.Loaded) { throw 'Disposable profile is still loaded; preserve it for diagnosis instead of deleting active data.' }
             $profile | Remove-CimInstance
