@@ -223,7 +223,8 @@ tray startup, version reporting, blocked busy upgrades, in-place upgrade and
 downgrade rejection, preserved credentials, owned startup cleanup, default
 uninstall, explicit privacy reset, and unchanged network/firewall/trust settings.
 The temporary user and its profile are removed afterward. Run this harness
-only from an elevated shell; it must never target an existing user's profile:
+only from an elevated PowerShell 7.4 or newer; it must never target an existing
+user's profile or change execution policy to run:
 
 ```powershell
 .\scripts\test-relay-installer.ps1 -OldSetup <older-fixture-Setup.exe> `

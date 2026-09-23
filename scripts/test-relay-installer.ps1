@@ -50,6 +50,8 @@ try {
         LOCALAPPDATA = $localData
         TEMP = Join-Path $localData 'Temp'
         TMP = Join-Path $localData 'Temp'
+        # Rebuild Windows PowerShell's module path instead of inheriting PS7 modules.
+        PSModulePath = $null
     }
     $arguments = @('-NoProfile', '-NonInteractive', '-File', "`"$stage\test-relay-installer-user.ps1`"",
         '-OldSetup', "`"$stage\old.exe`"", '-NewSetup', "`"$stage\new.exe`"",
