@@ -7,6 +7,7 @@ import json
 import logging
 from pathlib import Path
 import socket
+import socketserver
 import ssl
 import sys
 
@@ -59,6 +60,12 @@ class RelayHandler(http.server.BaseHTTPRequestHandler):
 
 class RelayServer(http.server.ThreadingHTTPServer):
     """Keep connection errors useful without logging request data or tracebacks."""
+
+    def server_bind(self) -> None:
+        """Bind the known loopback fixture without HTTPServer's reverse DNS lookup."""
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
 
     def handle_error(self, request: socket.socket, client_address: tuple) -> None:
         logging.warning("Mock relay connection failed (%s)", type(sys.exc_info()[1]).__name__)

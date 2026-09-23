@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 
 SPEC = importlib.util.spec_from_file_location(
@@ -78,6 +79,13 @@ class MockRelayTests(unittest.TestCase):
             status, body = self.request()
             self.assertEqual(200, status)
             self.assertEqual(1, json.loads(body)["protocolVersion"])
+
+    def test_loopback_startup_does_not_resolve_dns(self) -> None:
+        """A known loopback fixture must not wait for the runner's DNS resolver."""
+        with mock.patch("socket.getfqdn", side_effect=AssertionError("Unexpected DNS lookup")):
+            with MOCK_RELAY.create_server(self.cert, self.key, TOKEN, 0) as server:
+                self.assertEqual("localhost", server.server_name)
+                self.assertGreater(server.server_port, 0)
 
     def test_idle_tls_connection_does_not_block_http_request(self) -> None:
         """A completed handshake without HTTP data must not block other clients."""
