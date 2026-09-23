@@ -83,6 +83,16 @@ function Get-FirewallSnapshot {
     }
     finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($policy) }
 }
+function Get-TrustRootSnapshot {
+    $store = [Security.Cryptography.X509Certificates.X509Store]::new(
+        [Security.Cryptography.X509Certificates.StoreName]::Root,
+        [Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    try {
+        $store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+        return (@($store.Certificates | Select-Object -ExpandProperty Thumbprint | Sort-Object) -join ',')
+    }
+    finally { $store.Dispose() }
+}
 function Start-Relay {
     $script:relayProcess = Start-Process -FilePath $exe -PassThru
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
@@ -118,7 +128,7 @@ try {
     Assert-True (-not (Test-Path $install) -and -not (Test-Path $data)) 'Test user is not clean.'
     $firewall = Get-FirewallSnapshot
     $networks = Get-NetConnectionProfile | Select-Object InterfaceIndex, NetworkCategory | ConvertTo-Json -Compress
-    $roots = @(Get-ChildItem Cert:\CurrentUser\Root | Select-Object -ExpandProperty Thumbprint | Sort-Object) -join ','
+    $roots = Get-TrustRootSnapshot
     Install-Setup $OldSetup 'old-install.log'
     Assert-True ((Test-Path $exe) -and (Test-Path $shortcut)) 'Per-user files or shortcut missing.'
     Assert-True (-not (Test-Path $data)) 'Installer unexpectedly created pairing data.'
@@ -170,7 +180,7 @@ try {
     Assert-True ((Get-Startup) -eq $unrelated) 'Uninstall removed unrelated startup value.'
     Assert-True ((Get-FirewallSnapshot) -eq $firewall) 'Installer lifecycle changed firewall rules.'
     Assert-True ((Get-NetConnectionProfile | Select-Object InterfaceIndex, NetworkCategory | ConvertTo-Json -Compress) -eq $networks) 'Network profiles changed.'
-    Assert-True ((@(Get-ChildItem Cert:\CurrentUser\Root | Select-Object -ExpandProperty Thumbprint | Sort-Object) -join ',') -eq $roots) 'User trust roots changed.'
+    Assert-True ((Get-TrustRootSnapshot) -eq $roots) 'User trust roots changed.'
     foreach ($log in Get-ChildItem $PSScriptRoot -Filter '*.log') {
         $text = Get-Content $log.FullName -Raw
         Assert-True (-not $text.Contains($settings.Token) -and -not $text.Contains($settings.HostId)) 'Installer log contains pairing data.'
