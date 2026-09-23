@@ -5,6 +5,30 @@ namespace AgentMon.Relay.Windows;
 
 internal sealed class RelayForm : Form
 {
+    private sealed class ContentSizedButton : Button
+    {
+        internal ContentSizedButton()
+        {
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        }
+
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            var preferredSize = base.GetPreferredSize(proposedSize);
+            var textSize = TextRenderer.MeasureText(
+                Text,
+                Font,
+                Size.Empty,
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            var contentHeight =
+                textSize.Height +
+                Padding.Vertical +
+                (SystemInformation.Border3DSize.Height * 2);
+            return new Size(preferredSize.Width, Math.Max(preferredSize.Height, contentHeight));
+        }
+    }
+
     private enum UiOperation
     {
         CertificateRotation,
@@ -33,15 +57,15 @@ internal sealed class RelayForm : Form
     private readonly Label lastIndexedValue = CreateValueLabel();
     private readonly Label discoveryValue = CreateValueLabel();
     private readonly Label firewallValue = CreateValueLabel();
-    private readonly Button startStopButton = new();
-    private readonly Button saveNameButton = new();
-    private readonly Button revertNameButton = new();
-    private readonly Button copyUrlButton = new();
-    private readonly Button copyFingerprintButton = new();
-    private readonly Button revealTokenButton = new();
-    private readonly Button rotateTokenButton = new();
-    private readonly Button rotateCertificateButton = new();
-    private readonly Button configureFirewallButton = new();
+    private readonly Button startStopButton = new ContentSizedButton();
+    private readonly Button saveNameButton = new ContentSizedButton();
+    private readonly Button revertNameButton = new ContentSizedButton();
+    private readonly Button copyUrlButton = new ContentSizedButton();
+    private readonly Button copyFingerprintButton = new ContentSizedButton();
+    private readonly Button revealTokenButton = new ContentSizedButton();
+    private readonly Button rotateTokenButton = new ContentSizedButton();
+    private readonly Button rotateCertificateButton = new ContentSizedButton();
+    private readonly Button configureFirewallButton = new ContentSizedButton();
     private readonly CheckBox startupCheckBox = new();
     private readonly System.Windows.Forms.Timer refreshTimer = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer tokenTimer = new();
@@ -301,15 +325,13 @@ internal sealed class RelayForm : Form
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
         };
-        var quitButton = new Button
+        var quitButton = new ContentSizedButton
         {
-            AutoSize = true,
             Text = "&Quit",
             AccessibleName = "Quit AgentMon Relay",
         };
-        var logsButton = new Button
+        var logsButton = new ContentSizedButton
         {
-            AutoSize = true,
             Text = "Open &logs",
             AccessibleName = "Open relay log folder",
         };

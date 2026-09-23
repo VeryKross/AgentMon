@@ -143,22 +143,34 @@ public sealed class TrayUiTests
         });
 
     [TestMethod]
-    public Task FormLayout_RendersWithoutClippedControlsAtOneHundredAndOneHundredFiftyPercent()
+    public Task FormLayout_RendersButtonsWithoutClippingAtOneHundredOneHundredFiftyAndTwoHundredPercent()
         => RunStaAsync(() =>
         {
-            using var form = new RelayForm(
-                new FakeRelayController { View = CreateView("Running") },
-                () => Task.CompletedTask,
-                queryWindowsIntegration: false);
-            form.Show();
-            Application.DoEvents();
+            foreach (var scale in new[] { 1f, 1.5f, 2f })
+            {
+                using var form = new RelayForm(
+                    new FakeRelayController { View = CreateView("Running") },
+                    () => Task.CompletedTask,
+                    queryWindowsIntegration: false);
+                using var scaledFont = new Font(
+                    form.Font.FontFamily,
+                    form.Font.Size * scale,
+                    form.Font.Style,
+                    GraphicsUnit.Point);
+                form.Font = scaledFont;
+                form.Show();
+                Application.DoEvents();
 
-            AssertLayoutFits(form);
-            CaptureLayout(form, "tray-ui-100.png");
-            form.Scale(new SizeF(1.5f, 1.5f));
-            form.PerformLayout();
-            AssertLayoutFits(form);
-            CaptureLayout(form, "tray-ui-150.png");
+                Assert.AreSame(form.SaveNameButton, form.AcceptButton);
+                Assert.IsTrue(form.Width >= form.MinimumSize.Width);
+                Assert.IsTrue(form.Height >= form.MinimumSize.Height);
+                Assert.IsTrue(
+                    form.Controls.OfType<ScrollableControl>().Single().AutoScroll,
+                    "The Relay form must remain scrollable at large text sizes.");
+                AssertLayoutFits(form);
+                CaptureLayout(form, $"tray-ui-{scale * 100:0}.png");
+            }
+
             return Task.CompletedTask;
         });
 
@@ -174,6 +186,29 @@ public sealed class TrayUiTests
                 Assert.IsTrue(
                     child.Width >= child.PreferredSize.Width,
                     $"The '{child.Text}' control text is clipped.");
+                Assert.IsTrue(
+                    child.Height >= child.PreferredSize.Height,
+                    $"The '{child.Text}' control height is clipped.");
+            }
+
+            if (child is Button button)
+            {
+                Assert.IsTrue(
+                    button.Parent?.DisplayRectangle.Contains(button.Bounds) ?? true,
+                    $"The '{button.Text}' button is clipped by its container.");
+                var renderedText = TextRenderer.MeasureText(
+                    button.Text,
+                    button.Font,
+                    Size.Empty,
+                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+                Assert.IsTrue(
+                    button.ClientSize.Height >= renderedText.Height + button.Padding.Vertical,
+                    $"The '{button.Text}' button cannot accommodate its rendered text and padding.");
+                if (button.Enabled && button.Visible)
+                {
+                    button.Select();
+                    Assert.IsTrue(button.Focused, $"The '{button.Text}' button cannot receive keyboard focus.");
+                }
             }
 
             AssertLayoutFits(child);
