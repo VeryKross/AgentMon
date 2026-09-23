@@ -136,6 +136,7 @@ This directory is an implementation detail of GitHub Copilot rather than a publi
 |---|---|
 | `make test` | Builds the project and runs the test suite |
 | `make test-relay` | Verifies authenticated, certificate-pinned HTTPS against a local mock relay |
+| `python3 -B -m unittest discover -s scripts -p test_mock_relay.py` | Tests HTTPS mock authentication and idle-connection handling without Swift |
 | `make app` | Produces `.build/AgentMon.app` |
 | `make dmg` | Produces `dist/AgentMon.dmg` |
 | `make run` | Runs AgentMon from Swift Package Manager |
