@@ -7,10 +7,14 @@ internal sealed class RelayTrayContext : ApplicationContext
     private readonly RelayForm form;
     private bool quitting;
 
-    internal RelayTrayContext(IRelayController controller, bool startInBackground)
+    internal RelayTrayContext(
+        IRelayController controller,
+        bool startInBackground,
+        bool queryWindowsIntegration = true)
     {
         this.controller = controller;
-        form = new RelayForm(controller, QuitAsync);
+        form = new RelayForm(controller, QuitAsync, queryWindowsIntegration);
+        form.RelayStateChanged += UpdateStatusPresentation;
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("&Open AgentMon Relay", null, (_, _) => ShowForm());
@@ -25,16 +29,20 @@ internal sealed class RelayTrayContext : ApplicationContext
             Visible = true,
         };
         trayIcon.DoubleClick += (_, _) => ShowForm();
+        UpdateStatusPresentation(controller.GetView().State);
 
-        if (startInBackground)
-        {
-            _ = StartRelayAsync();
-        }
-        else
+        _ = StartRelayAsync();
+        if (!startInBackground)
         {
             ShowForm();
         }
     }
+
+    internal Icon CurrentTrayIcon => trayIcon.Icon ?? SystemIcons.Application;
+
+    internal RelayForm ManagementForm => form;
+
+    internal Task RequestQuitAsync() => QuitAsync();
 
     protected override void Dispose(bool disposing)
     {
@@ -76,6 +84,20 @@ internal sealed class RelayTrayContext : ApplicationContext
                 $"The relay could not start ({error.GetType().Name}). Open the app for details.",
                 ToolTipIcon.Error);
         }
+    }
+
+    private void UpdateStatusPresentation(string state)
+    {
+        var icon = state switch
+        {
+            "Running" => SystemIcons.Information,
+            "Waiting for private network" => SystemIcons.Warning,
+            "Error" => SystemIcons.Error,
+            _ => SystemIcons.Application,
+        };
+        trayIcon.Icon = icon;
+        trayIcon.Text = $"AgentMon Relay - {state}";
+        form.Icon = icon;
     }
 
     private async Task QuitAsync()

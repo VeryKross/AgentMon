@@ -35,6 +35,7 @@ internal sealed class RelayForm : Form
     private readonly Label firewallValue = CreateValueLabel();
     private readonly Button startStopButton = new();
     private readonly Button saveNameButton = new();
+    private readonly Button revertNameButton = new();
     private readonly Button copyUrlButton = new();
     private readonly Button copyFingerprintButton = new();
     private readonly Button revealTokenButton = new();
@@ -46,10 +47,15 @@ internal sealed class RelayForm : Form
     private readonly System.Windows.Forms.Timer tokenTimer = new();
     private bool busy;
     private bool closingForQuit;
+    private bool displayNameDirty;
+    private bool settingDisplayName;
     private bool firewallCanConfigure = true;
     private bool startupAvailable = true;
 
-    internal RelayForm(IRelayController controller, Func<Task> quitAsync)
+    internal RelayForm(
+        IRelayController controller,
+        Func<Task> quitAsync,
+        bool queryWindowsIntegration = true)
     {
         this.controller = controller;
         this.quitAsync = quitAsync;
@@ -57,7 +63,7 @@ internal sealed class RelayForm : Form
         Text = "AgentMon Relay";
         AccessibleName = "AgentMon Relay management";
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(720, 650);
+        ClientSize = new Size(720, 720);
         MinimumSize = new Size(620, 580);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
@@ -67,8 +73,33 @@ internal sealed class RelayForm : Form
         BuildLayout();
         WireEvents();
         RefreshView();
-        RefreshWindowsIntegration();
+        if (queryWindowsIntegration)
+        {
+            RefreshWindowsIntegration();
+        }
+        else
+        {
+            startupCheckBox.Enabled = false;
+            configureFirewallButton.Enabled = false;
+            firewallValue.Text = "Not queried";
+        }
     }
+
+    internal event Action<string>? RelayStateChanged;
+
+    internal TextBox DisplayNameEditor => displayNameTextBox;
+
+    internal Button RevertNameButton => revertNameButton;
+
+    internal Button SaveNameButton => saveNameButton;
+
+    internal Button StartStopButton => startStopButton;
+
+    internal string StateText => stateValue.Text;
+
+    internal string ErrorText => errorValue.Text;
+
+    internal string StartStopText => startStopButton.Text;
 
     internal void RefreshView()
     {
@@ -78,6 +109,7 @@ internal sealed class RelayForm : Form
         }
 
         var view = controller.GetView();
+        var previousState = stateValue.Text;
         stateValue.Text = view.State;
         stateValue.ForeColor = GetStateColor(view.State);
         errorValue.Text = string.IsNullOrWhiteSpace(view.Error) ? "None" : view.Error;
@@ -89,9 +121,11 @@ internal sealed class RelayForm : Form
             : view.LastIndexedAt.Value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture);
         fingerprintTextBox.Text = view.Fingerprint;
 
-        if (!displayNameTextBox.Focused)
+        if (!displayNameDirty)
         {
+            settingDisplayName = true;
             displayNameTextBox.Text = view.DisplayName;
+            settingDisplayName = false;
         }
 
         var selectedUrl = urlsListBox.SelectedItem as string;
@@ -109,7 +143,12 @@ internal sealed class RelayForm : Form
 
         urlsListBox.EndUpdate();
         copyUrlButton.Enabled = urlsListBox.SelectedItem is not null && !busy;
-        startStopButton.Text = IsRunningState(view.State) ? "&Stop relay" : "&Start relay";
+        startStopButton.Text = IsActiveState(view.State) ? "&Stop relay" : "&Start relay";
+        revertNameButton.Enabled = displayNameDirty && !busy;
+        if (!string.Equals(previousState, view.State, StringComparison.Ordinal))
+        {
+            RelayStateChanged?.Invoke(view.State);
+        }
     }
 
     internal void PrepareForShutdown()
@@ -127,6 +166,13 @@ internal sealed class RelayForm : Form
             e.Cancel = true;
             HideToken();
             Hide();
+            return;
+        }
+
+        if (!closingForQuit)
+        {
+            e.Cancel = true;
+            _ = quitAsync();
             return;
         }
 
@@ -186,7 +232,18 @@ internal sealed class RelayForm : Form
         displayNameTextBox.AccessibleName = "Computer display name";
         saveNameButton.Text = "&Save name";
         saveNameButton.AccessibleName = "Save computer display name";
-        AddRowWithButton(identityGrid, "Computer name", displayNameTextBox, saveNameButton);
+        revertNameButton.Text = "&Revert";
+        revertNameButton.AccessibleName = "Revert computer display name";
+        var nameButtons = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = Padding.Empty,
+            WrapContents = false,
+        };
+        nameButtons.Controls.Add(saveNameButton);
+        nameButtons.Controls.Add(revertNameButton);
+        AddRowWithButton(identityGrid, "Computer name", displayNameTextBox, nameButtons);
 
         urlsListBox.Height = 54;
         urlsListBox.IntegralHeight = false;
@@ -215,8 +272,10 @@ internal sealed class RelayForm : Form
         };
         rotateTokenButton.Text = "Rotate &token...";
         rotateTokenButton.AccessibleName = "Rotate pairing token";
+        rotateTokenButton.AutoSize = true;
         rotateCertificateButton.Text = "Rotate &certificate...";
         rotateCertificateButton.AccessibleName = "Rotate relay certificate";
+        rotateCertificateButton.AutoSize = true;
         rotationPanel.Controls.Add(rotateTokenButton);
         rotationPanel.Controls.Add(rotateCertificateButton);
         AddFullWidthRow(identityGrid, rotationPanel);
@@ -232,6 +291,7 @@ internal sealed class RelayForm : Form
 
         startupCheckBox.Text = "Start AgentMon Relay when I sign in";
         startupCheckBox.AccessibleName = "Start AgentMon Relay when signing in";
+        startupCheckBox.AutoSize = true;
         AddFullWidthRow(windowsGrid, startupCheckBox);
 
         var footerPanel = new FlowLayoutPanel
@@ -271,7 +331,7 @@ internal sealed class RelayForm : Form
             UiOperation.RelayStateChange,
             async () =>
             {
-                if (IsRunningState(controller.GetView().State))
+                if (IsActiveState(controller.GetView().State))
                 {
                     await controller.StopAsync();
                 }
@@ -299,6 +359,23 @@ internal sealed class RelayForm : Form
             }
 
             await RunControllerActionAsync(UiOperation.DisplayNameUpdate, () => controller.SetDisplayNameAsync(name));
+            displayNameDirty = false;
+            RefreshView();
+        };
+        revertNameButton.Click += (_, _) =>
+        {
+            displayNameDirty = false;
+            RefreshView();
+            displayNameTextBox.SelectAll();
+            displayNameTextBox.Focus();
+        };
+        displayNameTextBox.TextChanged += (_, _) =>
+        {
+            if (!settingDisplayName)
+            {
+                displayNameDirty = true;
+                revertNameButton.Enabled = !busy;
+            }
         };
 
         copyUrlButton.Click += (_, _) =>
@@ -507,6 +584,7 @@ internal sealed class RelayForm : Form
         UseWaitCursor = value;
         startStopButton.Enabled = !value;
         saveNameButton.Enabled = !value;
+        revertNameButton.Enabled = !value && displayNameDirty;
         copyUrlButton.Enabled = !value && urlsListBox.SelectedItem is not null;
         copyFingerprintButton.Enabled = !value;
         revealTokenButton.Enabled = !value;
@@ -608,10 +686,11 @@ internal sealed class RelayForm : Form
             MessageBoxIcon.Information);
     }
 
-    private static bool IsRunningState(string state)
+    private static bool IsActiveState(string state)
     {
         return state.Equals("Running", StringComparison.OrdinalIgnoreCase) ||
-               state.Equals("Waiting for private network", StringComparison.OrdinalIgnoreCase);
+               state.Equals("Waiting for private network", StringComparison.OrdinalIgnoreCase) ||
+               state.Equals("Error", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Color GetStateColor(string state)
@@ -695,16 +774,16 @@ internal sealed class RelayForm : Form
         TableLayoutPanel grid,
         string label,
         Control control,
-        Button button)
+        Control actionControl)
     {
         var row = grid.RowCount++;
         grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         control.Dock = DockStyle.Fill;
-        button.AutoSize = true;
-        button.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        actionControl.AutoSize = true;
+        actionControl.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         grid.Controls.Add(CreateFieldLabel(label), 0, row);
         grid.Controls.Add(control, 1, row);
-        grid.Controls.Add(button, 2, row);
+        grid.Controls.Add(actionControl, 2, row);
     }
 
     private static void AddFullWidthRow(TableLayoutPanel grid, Control control)
