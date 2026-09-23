@@ -8,14 +8,22 @@ account. It does not control Copilot.
 
 ## Install and run
 
-1. Obtain `AgentMonRelay-win-x64.zip` and its `.sha256` from the Windows Relay
-   workflow artifacts, or build them using the command below.
-2. Verify the archive with `Get-FileHash -Algorithm SHA256`, then extract it
-   into a stable per-user folder such as
-   `%LOCALAPPDATA%\Programs\AgentMonRelay`. Keep the included notices.
-3. Run `AgentMonRelay.exe`. No separately installed .NET runtime is needed.
-   The initial portable build is unsigned; follow your organization's software
-   approval policy rather than disabling Windows security features.
+1. Obtain `AgentMonRelay-<version>-win-x64-unsigned-Setup.exe` and its `.sha256`
+   from the [Windows Relay workflow artifacts](https://github.com/VeryKross/AgentMon/actions/workflows/windows-relay.yml).
+   ARM64 computers use the `win-arm64` installer. Approved signed builds use
+   `signed` instead of `unsigned` in their filenames.
+2. Check that `Get-FileHash -Algorithm SHA256 .\AgentMonRelay-<version>-win-x64-unsigned-Setup.exe`
+   matches the adjacent checksum file. A checksum detects corruption; it does
+   not establish publisher trust. Run the installer as your normal Windows
+   user, not as another administrator.
+3. Setup installs into `%LOCALAPPDATA%\Programs\AgentMonRelay` without requesting
+   administrator rights, adds **AgentMon Relay** to Start and Installed Apps,
+   and displays the installed version. The completion page offers an unchecked
+   **Launch AgentMon Relay** action; alternatively launch it from Start.
+   No separately installed .NET runtime is needed.
+   Unsigned artifacts are development/release candidates, not trusted signed
+   releases. Follow your organization's software approval policy; do not
+   disable SmartScreen, Defender, or other security controls to run them.
 4. On a trusted LAN, set the Windows connection's network profile to
    **Private** in Windows Settings. Do not mark an untrusted network Private.
 5. Use **Configure private firewall** in the relay. This explicit operation
@@ -24,10 +32,19 @@ account. It does not control Copilot.
    remote addresses only. Do not approve a separate broad/Public rule from a
    Windows firewall prompt.
 
-No startup entry or firewall exception is installed automatically. A portable
-archive is used instead of an installer so installation never silently grants
-network access. Moving the executable requires updating startup and configuring
-the firewall rule again.
+Installation never changes a network profile, firewall rule, startup choice,
+or certificate trust store. Only the explicit in-app firewall action requests
+administrator approval. The installer adds no service, scheduled task, or driver.
+
+### Portable alternative
+
+The versioned `AgentMonRelay-<version>-win-x64-unsigned.zip` (or `win-arm64`,
+or `signed`) and its `.sha256` remain supported. Verify the checksum, extract
+to a stable per-user folder, keep all included notices, and run
+`AgentMonRelay.exe`. Moving a portable executable requires updating startup
+and configuring its narrowly scoped firewall rule again. The installer can
+adopt the default per-user folder after you quit the portable relay; it never
+reads or changes the separate pairing-data directory during installation.
 
 ## Pair with the Mac
 
@@ -63,6 +80,12 @@ line, and the branch remains in the host line.
 Closing the management window hides it in the notification area; it does not
 quit the relay. Double-click the tray icon to reopen it. **Quit** stops polling,
 shuts down HTTPS, withdraws discovery, and exits.
+
+The application and installer share AgentMon's one-bit retro computer icon.
+The tray uses shape rather than color for status: empty ports when stopped,
+a solid connection when running, a dashed connection while waiting for a
+private network, and a broken connection on error. The same status is stated
+in text. Button sizes follow font metrics at high DPI rather than fixed heights.
 
 **Start AgentMon Relay when I sign in** is opt-in. It writes a quoted executable
 path plus `--background` into the current user's Windows `Run` registry key.
@@ -171,44 +194,107 @@ dotnet test .\AgentMon.Relay.Windows.Tests\AgentMon.Relay.Windows.Tests.csproj -
 Remove-Item Env:\AGENTMON_TEST_MDNS
 Pop-Location
 .\scripts\publish-relay.ps1
-# Optional alternate architecture:
-.\scripts\publish-relay.ps1 -Runtime win-arm64
+# Pin and install the open-source compiler for installer builds:
+.\scripts\install-inno-setup.ps1
+.\scripts\publish-relay.ps1 -Installer
+.\scripts\publish-relay.ps1 -Runtime win-arm64 -Installer
+.\scripts\test-relay-artifacts.ps1 -Version 0.2.1
 ```
 
 The release command uses pinned packages, locked restore, the pinned SDK,
 deterministic compilation, and self-contained single-file publishing. Outputs
-are under `dist\AgentMonRelay-win-x64` plus a ZIP and SHA-256 checksum.
-It does not sign, install, launch, register startup, or change the firewall.
+are under `dist\AgentMonRelay-<version>-<runtime>-<signed|unsigned>`, plus a ZIP,
+an optional `-Setup.exe`, and a SHA-256 checksum for each artifact.
+Building packages does not install or launch the relay or change its startup
+or firewall settings. Inno Setup 6.7.3 is pinned by download URL and SHA-256
+in `Relay\installer-toolchain.json`; its source and build configuration are
+committed, not proprietary tooling. Inno Setup was selected for mature
+non-administrator installation, native accessible wizard controls, built-in
+uninstall registration, and scriptable x64/ARM64 packaging.
 The ZIP's timestamps/checksum can change between builds; reproducibility here
 means the same pinned build inputs, not byte-identical ZIP containers.
 
+The editable icon source and deterministic Windows ICO generator live in
+`Relay\AgentMon.Relay.Windows\Assets`. Run `Generate-RelayIcons.ps1` there when
+changing the artwork; the checked-in ICOs contain 16, 20, 24, 32, 48, 64, and
+256-pixel frames and need no external asset service.
+
 Windows CI runs native parsing, process-lock, DPAPI, network-profile,
 redaction, HTTPS/pinning/authentication, freshness, rate-limit, and shutdown
-coverage and publishes both architectures. ARM64 execution still requires
+coverage and publishes installers and ZIPs for both architectures. It also
+creates a disposable standard Windows user to exercise clean installation,
+tray startup, version reporting, blocked busy upgrades, in-place upgrade and
+downgrade rejection, preserved credentials, owned startup cleanup, default
+uninstall, explicit privacy reset, and unchanged network/firewall/trust settings.
+The temporary user and its profile are removed afterward. Run this harness
+only from an elevated PowerShell 7.4 or newer; it must never target an existing
+user's profile or change execution policy to run:
+
+```powershell
+.\scripts\test-relay-installer.ps1 -OldSetup <older-fixture-Setup.exe> `
+    -NewSetup <current-Setup.exe> -ExpectedVersion 0.2.1
+```
+
+CI builds the older fixture from the current source with `-Version 0.1.9`;
+that synthetic test artifact is not uploaded as a release. ARM64 execution still requires
 an ARM64 Windows machine. The existing macOS CI runs `swift test` and
 `make test-relay`; real paired Windows/Mac acceptance must be performed on
 the two computers.
 
-## Upgrade and complete removal
+### Optional Authenticode signing
 
-To upgrade, quit the relay, replace the executable in the same installation
-folder, and relaunch. Do not remove `settings.dpapi`; keeping it preserves the
-host ID and pairing.
+Normal builds need no signing credentials and are explicitly labeled `unsigned`.
+To sign, provide `RELAY_SIGNING_PFX_BASE64` and `RELAY_SIGNING_PFX_PASSWORD`
+through protected CI secrets, plus `RELAY_SIGNING_TIMESTAMP_URL` as a CI variable
+(default `http://timestamp.digicert.com`). Do not put credential values into
+commands, repository files, or logs. Pull-request builds never receive these
+secrets. The signing helper loads the PFX in memory using a temporary
+Windows-protected key container; no plaintext PFX is written to disk.
 
-To remove:
+The application, installer, and embedded uninstaller are SHA-256 Authenticode
+signed and timestamped. Invalid signatures or missing timestamps fail the build
+rather than producing a falsely labeled signed package. Signing requires a
+valid code-signing certificate whose chain Windows trusts; setup does not add
+trust roots. Publisher reputation and your organization's policy still apply
+even to correctly signed packages.
 
-1. Uncheck **Start AgentMon Relay when I sign in**, then **Quit**.
-2. In Windows Defender Firewall with Advanced Security, remove the inbound
-   rule named **AgentMon Relay (Private network only)**. Administrator approval
-   is required.
-3. Delete the relay's installation folder and
-   `%LOCALAPPDATA%\AgentMonRelay` (this deliberately destroys pairing and logs).
-   If the single-file runtime extraction cache remains, remove only
-   `%TEMP%\.net\AgentMonRelay`, not the shared `.net` directory.
-4. Disable Windows Relay on the Mac and remove its saved pairing token if
-   desired.
+## Upgrade and removal
 
-If the executable was removed before startup was disabled, delete only the
-`AgentMon Relay` value under
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Reinstalling after deleting
-settings creates a new host ID, token, and certificate and requires re-pairing.
+Quit from the relay tray menu, then run the newer installer as the same Windows
+user. Setup refuses downgrades and refuses to replace a running relay; it does
+not force-kill the app or defer replacement to reboot. The stable installation
+path preserves an existing opt-in startup command and firewall rule.
+`%LOCALAPPDATA%\AgentMonRelay\settings.dpapi` is not an installer payload and is
+never replaced during upgrade: host identity, token, certificate, and Mac
+pairing remain intact. Same-version repairs are allowed.
+
+Use **Settings > Apps > Installed Apps > AgentMon Relay > Uninstall**. Quit the
+relay first if prompted. Uninstall removes only its installed files, shortcut,
+and matching opt-in startup command. If its exact executable/TCP 47831/Private/
+LocalSubnet firewall rule exists, cleanup requests administrator approval to
+remove it. A denied elevation or ambiguous duplicate rule aborts removal with
+an explanation rather than deleting unrelated rules. An unrelated startup
+command is left untouched.
+
+The uninstaller asks whether to remove pairing identity, credentials, and logs.
+**No is the default**: preserving these allows reinstallation without breaking
+pairing. Choose **Yes** only for a complete privacy reset. This removes only
+`%LOCALAPPDATA%\AgentMonRelay`; redirected data directories/junctions are refused.
+It cannot be undone, and reinstalling creates a new identity requiring re-pairing.
+
+Silent uninstall preserves data; `/REMOVEUSERDATA=1` explicitly requests the
+complete-removal path. Silent cleanup fails if firewall removal requires
+elevation, rather than hiding an approval prompt. Remove the exact relay rule
+with approved administrator access first, or use interactive uninstall.
+
+For portable removal, quit the app, then run the executable's
+`--uninstall-cleanup` command from its existing directory to remove only its
+owned startup/firewall integration. Run `--remove-user-data` only if you
+explicitly want to destroy pairing and logs, then remove the portable files.
+`--shutdown` requests a graceful exit of the current user's running relay;
+`--version` reports its version without opening the UI or creating settings.
+If the executable has already been deleted, manually remove only its matching
+`AgentMon Relay` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+and its exact firewall rule. If a runtime extraction cache remains, remove only
+`%TEMP%\.net\AgentMonRelay`, not the shared `.net` directory. Disable Windows
+Relay on the Mac and remove its saved Keychain pairing token if desired.

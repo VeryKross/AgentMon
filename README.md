@@ -109,13 +109,19 @@ The versioned contract is documented in [`docs/relay-protocol-v1.md`](docs/relay
 
 The native Windows companion lives in `Relay/AgentMon.Relay.Windows`. It provides
 a tray UI, protected persistent pairing credentials, a Private-network-only HTTPS
-listener, and bounded local Copilot indexing. Build a self-contained Windows
-archive with `.\scripts\publish-relay.ps1`, or use the Windows Relay workflow's
-artifacts. No separately installed .NET runtime is required.
+listener, and bounded local Copilot indexing. Download a versioned x64 or ARM64
+installer and matching SHA-256 checksum from the Windows Relay workflow's
+artifacts. Setup installs per-user, adds a Start menu shortcut, and preserves
+pairing through upgrades. Portable ZIPs remain available. No separately
+installed .NET runtime is required.
 
 See [Windows installation, pairing, privacy, and removal](docs/windows-relay.md).
-The initial portable Windows build is unsigned and supports IPv4 private LANs;
-startup and the narrowly scoped firewall rule are explicit opt-in actions.
+Windows artifacts identify whether they are signed or unsigned; unsigned builds
+are development/release candidates, not trusted signed releases. Follow your
+software approval policy without disabling Windows security. IPv4 private LANs
+are supported; network-profile changes, startup, and the narrowly scoped
+firewall rule remain explicit actions. Uninstall preserves pairing by default
+and offers a separate, explicit complete privacy reset.
 
 ## How agent status works
 
@@ -142,6 +148,7 @@ This directory is an implementation detail of GitHub Copilot rather than a publi
 | `make run` | Runs AgentMon from Swift Package Manager |
 | `make demo` | Runs with sanitized sample data |
 | `.\scripts\publish-relay.ps1` (Windows) | Produces a self-contained Windows x64 relay ZIP and checksum |
+| `.\scripts\install-inno-setup.ps1`, then `.\scripts\publish-relay.ps1 -Installer` | Produces a per-user installer alongside the portable ZIP, both with checksums |
 
 ## Project structure
 

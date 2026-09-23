@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Editable master. Generate-RelayIcons.ps1 owns the size-specific pixel rendering. -->
+  <defs>
+    <pattern id="dither" width="12" height="12" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#0b0d0b"/>
+      <rect x="6" y="6" width="4" height="4" fill="#0b0d0b"/>
+    </pattern>
+    <clipPath id="tile">
+      <path d="M24 4h208l20 20v208l-20 20H24L4 232V24z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <path d="M24 4h208l20 20v208l-20 20H24L4 232V24z" fill="#aba99a"/>
+    <rect width="256" height="256" fill="url(#dither)" opacity=".28"/>
+    <path d="M54 44h154l20 20v156l-20 20H54l-20-20V64z" fill="#0b0d0b" opacity=".72" transform="translate(8 8)"/>
+    <path d="M54 36h148l18 18v156l-18 18H54l-18-18V54z" fill="#e8e6d6" stroke="#0b0d0b" stroke-width="12"/>
+    <path d="M74 70h108v84H74z" fill="#0b0d0b"/>
+    <path d="M84 80h88v64H84z" fill="#e8e6d6"/>
+    <rect x="96" y="106" width="14" height="14" fill="#0b0d0b"/>
+    <rect x="146" y="106" width="14" height="14" fill="#0b0d0b"/>
+    <path d="M110 110h36v7h-36z" fill="#0b0d0b"/>
+    <rect x="123" y="106" width="10" height="14" fill="#0b0d0b"/>
+    <rect x="74" y="176" width="82" height="10" fill="#0b0d0b"/>
+    <rect x="170" y="190" width="16" height="14" fill="#0b0d0b"/>
+  </g>
+  <path d="M24 4h208l20 20v208l-20 20H24L4 232V24z" fill="none" stroke="#0b0d0b" stroke-width="8"/>
+</svg>

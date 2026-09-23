@@ -189,17 +189,87 @@ internal static class WindowsIntegration
         });
     }
 
-    private static bool RuleMatches(dynamic rule)
+    internal static void RemoveOwnedStartupEntry()
     {
-        return (bool)rule.Enabled &&
-               (int)rule.Direction == InboundDirection &&
-               (int)rule.Action == AllowAction &&
-               (int)rule.Protocol == TcpProtocol &&
-               (int)rule.Profiles == PrivateProfile &&
-               string.Equals((string)rule.ApplicationName, GetInstalledExecutablePath(), StringComparison.OrdinalIgnoreCase) &&
-               string.Equals((string)rule.LocalPorts, RelayPort.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal) &&
-               string.Equals((string)rule.RemoteAddresses, LocalSubnet, StringComparison.OrdinalIgnoreCase);
+        using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
+        if (StartupCommandMatches(key?.GetValue(StartupValueName) as string, GetInstalledExecutablePath()))
+            key!.DeleteValue(StartupValueName, throwOnMissingValue: false);
     }
+
+    internal static bool StartupCommandMatches(string? command, string executablePath)
+        => string.Equals(command, $"\"{executablePath}\" --background", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool RemovePrivateFirewallRuleElevated()
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = GetInstalledExecutablePath(),
+            Arguments = "--remove-firewall",
+            UseShellExecute = true,
+            Verb = "runas",
+            WindowStyle = ProcessWindowStyle.Hidden,
+        }) ?? throw new InvalidOperationException("Could not start firewall removal.");
+        process.WaitForExit();
+        return process.ExitCode == 0;
+    }
+
+    internal static bool HasOwnedPrivateFirewallRule() => InspectOwnedFirewallRule(remove: false);
+
+    internal static void RemoveOwnedPrivateFirewallRule() => InspectOwnedFirewallRule(remove: true);
+
+    private static bool InspectOwnedFirewallRule(bool remove)
+    {
+        object? policy = null;
+        object? rules = null;
+        try
+        {
+            policy = CreateComObject("HNetCfg.FwPolicy2");
+            rules = ((dynamic)policy).Rules;
+            var namedCount = 0;
+            var owned = false;
+            foreach (var rule in (System.Collections.IEnumerable)rules)
+            {
+                try
+                {
+                    if (!string.Equals((string)((dynamic)rule).Name, FirewallRuleName, StringComparison.Ordinal))
+                        continue;
+                    namedCount++;
+                    owned |= RuleMatches((dynamic)rule, requireEnabled: false);
+                }
+                finally
+                {
+                    ReleaseComObject(rule);
+                }
+            }
+            // COM removes by name, not object identity. Never risk deleting an unrelated duplicate.
+            if (owned && namedCount != 1)
+                throw new InvalidOperationException("Ambiguous firewall rule; remove the relay rule manually.");
+            if (owned && remove)
+                ((dynamic)rules).Remove(FirewallRuleName);
+            return owned;
+        }
+        finally
+        {
+            ReleaseComObject(rules);
+            ReleaseComObject(policy);
+        }
+    }
+
+    internal sealed record FirewallRuleConfiguration(bool Enabled, int Direction, int Action, int Protocol,
+        int Profiles, string ApplicationName, string LocalPorts, string RemoteAddresses);
+
+    private static bool RuleMatches(dynamic rule, bool requireEnabled = true)
+        => FirewallRuleMatches(new FirewallRuleConfiguration((bool)rule.Enabled, (int)rule.Direction,
+            (int)rule.Action, (int)rule.Protocol, (int)rule.Profiles, (string)rule.ApplicationName,
+            (string)rule.LocalPorts, (string)rule.RemoteAddresses), GetInstalledExecutablePath(), requireEnabled);
+
+    internal static bool FirewallRuleMatches(FirewallRuleConfiguration rule, string executablePath, bool requireEnabled)
+        => (!requireEnabled || rule.Enabled) &&
+           rule.Direction == InboundDirection && rule.Action == AllowAction &&
+           rule.Protocol == TcpProtocol && rule.Profiles == PrivateProfile &&
+           string.Equals(rule.ApplicationName, executablePath, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(rule.LocalPorts, RelayPort.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal) &&
+           string.Equals(rule.RemoteAddresses, LocalSubnet, StringComparison.OrdinalIgnoreCase);
 
     private static string BuildStartupCommand()
     {
