@@ -107,7 +107,7 @@ AgentMon can merge sessions from a Windows companion on the same private network
 
 The versioned contract is documented in [`docs/relay-protocol-v1.md`](docs/relay-protocol-v1.md). It defines the privacy boundary, authenticated transport, snapshot fields, activity semantics, freshness requirements, and expected HTTP behavior.
 
-The initial Windows companion is tracked separately so it can be built and tested natively on Windows. Until that companion is installed, leave the relay setting disabled.
+The initial Windows companion is tracked in [the Windows relay implementation issue](https://github.com/VeryKross/AgentMon/issues/1) so it can be built and tested natively on Windows. Until that companion is installed, leave the relay setting disabled.
 
 ## How agent status works
 
