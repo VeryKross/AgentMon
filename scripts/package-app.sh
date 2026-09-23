@@ -4,8 +4,8 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 CONFIGURATION=${CONFIGURATION:-release}
 SIGNING_IDENTITY=${CODESIGN_IDENTITY:--}
-APP_VERSION=${APP_VERSION:-0.1.3}
-BUILD_NUMBER=${BUILD_NUMBER:-4}
+APP_VERSION=${APP_VERSION:-0.2.0}
+BUILD_NUMBER=${BUILD_NUMBER:-5}
 APP_DIR="$ROOT_DIR/.build/AgentMon.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
@@ -52,6 +52,12 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>AgentMon connects to paired Copilot session relays on your private network.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_agentmon._tcp</string>
+    </array>
 </dict>
 </plist>
 PLIST

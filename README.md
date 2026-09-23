@@ -23,6 +23,7 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 
 - **Live Mac health:** processor load, memory use, startup-disk use, and uptime
 - **Copilot session desk:** active and recent GitHub Copilot project sessions, repositories, branches, and activity
+- **Cross-computer view:** merges sessions from a securely paired Windows relay into one prioritized Agent Desk
 - **Attention state:** visually inverts a session when Copilot is waiting for an answer
 - **Local weather:** keyless temperature data from [Open-Meteo](https://open-meteo.com/) with fresh U.S. sky observations from the [National Weather Service](https://www.weather.gov/), defaulting to Marietta, Georgia 30066
 - **Glanceable weather artwork:** distinct MacPaint-style scenes for sky coverage, day and night, fog, drizzle, rain, snow, and thunderstorms
@@ -32,7 +33,7 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 
 ## Privacy
 
-System metrics and Copilot session metadata are read locally. AgentMon only inspects the metadata needed to identify a project, branch, recency, and state. It does not upload project names, prompts, source code, or session content.
+System metrics and local Copilot session metadata are read on the Mac. A paired relay sends only normalized project, repository, branch, recency, and activity metadata over certificate-pinned HTTPS. Prompts, source code, tool payloads, and raw event records never cross the network.
 
 The configured location is sent to the weather providers. Open-Meteo supplies temperature and worldwide fallback conditions. U.S. ZIP codes are resolved through [Zippopotam.us](https://www.zippopotam.us/), and fresh sky conditions come from nearby National Weather Service observation stations. No API keys are required.
 
@@ -100,9 +101,17 @@ Open the AgentMon menu-bar item and choose **Settings…** to change:
 
 The menu-bar item can also return AgentMon to a normal resizable window.
 
+## Windows relay
+
+AgentMon can merge sessions from a Windows companion on the same private network. In **Settings → Windows Relay**, enter the relay's HTTPS URL, certificate SHA-256 fingerprint, and pairing token. The token is stored in this Mac's Keychain; a changed certificate fails closed until explicitly paired again.
+
+The versioned contract is documented in [`docs/relay-protocol-v1.md`](docs/relay-protocol-v1.md). It defines the privacy boundary, authenticated transport, snapshot fields, activity semantics, freshness requirements, and expected HTTP behavior.
+
+The initial Windows companion is tracked separately so it can be built and tested natively on Windows. Until that companion is installed, leave the relay setting disabled.
+
 ## How agent status works
 
-AgentMon reads workspace metadata and recent event types under `~/.copilot/session-state`. Session content is not displayed or transmitted. The adapter recognizes four states:
+For local sessions, AgentMon reads workspace metadata and recent event types under `~/.copilot/session-state`. Remote relays apply the same derivation locally and transmit only the resulting normalized state. The adapters recognize four states:
 
 | State | Meaning |
 |---|---|
@@ -118,6 +127,7 @@ This directory is an implementation detail of GitHub Copilot rather than a publi
 | Command | Result |
 |---|---|
 | `make test` | Builds the project and runs the test suite |
+| `make test-relay` | Verifies authenticated, certificate-pinned HTTPS against a local mock relay |
 | `make app` | Produces `.build/AgentMon.app` |
 | `make dmg` | Produces `dist/AgentMon.dmg` |
 | `make run` | Runs AgentMon from Swift Package Manager |
@@ -132,6 +142,8 @@ Sources/AgentMon/
 ├── DashboardView.swift        # 1280×720 Macintosh Mission Control UI
 ├── SystemMonitor.swift        # Native CPU, memory, disk, and uptime metrics
 ├── CopilotSessionMonitor.swift
+├── RelayClient.swift           # Pinned-HTTPS relay transport and Keychain token
+├── RelayProtocol.swift         # Versioned cross-platform snapshot contract
 ├── WeatherService.swift
 ├── WeatherGlyph.swift          # One-bit condition artwork
 ├── RetroComponents.swift

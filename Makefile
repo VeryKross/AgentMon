@@ -1,10 +1,13 @@
-.PHONY: build test app dmg run demo clean
+.PHONY: build test test-relay app dmg run demo clean
 
 build:
 	swift build
 
 test:
 	swift test
+
+test-relay:
+	sh scripts/test-relay.sh
 
 app:
 	sh scripts/package-app.sh

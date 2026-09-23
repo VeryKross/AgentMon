@@ -146,6 +146,67 @@ import Testing
   #expect(WeatherLocationParser.usZipCode(from: "SW1A 1AA") == nil)
 }
 
+@Test func decodesRelaySnapshotAndAssignsHost() throws {
+  let data = """
+    {
+      "protocolVersion": 1,
+      "relayVersion": "0.1.0",
+      "generatedAt": "2026-09-23T02:15:01.123Z",
+      "host": {
+        "id": "windows-1",
+        "name": "Windows Desktop",
+        "platform": "windows"
+      },
+      "sessions": [{
+        "id": "session-1",
+        "project": "AgentMon",
+        "task": "Build the relay",
+        "repository": "VeryKross/AgentMon",
+        "branch": "main",
+        "activity": "working",
+        "updatedAt": "2026-09-23T02:14:57Z"
+      }]
+    }
+    """.data(using: .utf8)!
+
+  let snapshot = try RelaySnapshotDecoder.decode(data)
+  let session = try #require(snapshot.agentSessions().first)
+
+  #expect(snapshot.protocolVersion == 1)
+  #expect(session.id == "windows-1:session-1")
+  #expect(session.host.name == "Windows Desktop")
+  #expect(session.host.platform == .windows)
+  #expect(session.activity == .working)
+}
+
+@Test func normalizesRelayCertificateFingerprint() {
+  let fingerprint = "AA:01 bb-23"
+  #expect(PinnedRelayDelegate.normalize(fingerprint) == "aa01bb23")
+}
+
+@Test func fetchesPinnedRelaySnapshot() async throws {
+  let environment = ProcessInfo.processInfo.environment
+  guard let rawURL = environment["AGENTMON_TEST_RELAY_URL"],
+    let url = URL(string: rawURL),
+    let token = environment["AGENTMON_TEST_RELAY_TOKEN"],
+    let fingerprint = environment["AGENTMON_TEST_RELAY_FINGERPRINT"]
+  else {
+    return
+  }
+
+  let snapshot = try await RelayClient().fetchSnapshot(
+    configuration: RelayConfiguration(
+      baseURL: url,
+      certificateFingerprint: fingerprint,
+      token: token
+    )
+  )
+
+  #expect(snapshot.host.name == "Mock Windows Desktop")
+  #expect(snapshot.sessions.count == 1)
+  #expect(snapshot.sessions.first?.activity == .working)
+}
+
 @Test func mapsEveryWeatherFamilyToDistinctArtwork() {
   #expect(WeatherCode.artwork(for: 0, cloudCover: 0, isDay: true) == .sunny)
   #expect(WeatherCode.artwork(for: 0, cloudCover: 0, isDay: false) == .clearNight)

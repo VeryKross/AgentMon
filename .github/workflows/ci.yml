@@ -11,5 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and test
         run: swift test
+      - name: Test secure relay transport
+        run: make test-relay
       - name: Build app bundle
         run: make app

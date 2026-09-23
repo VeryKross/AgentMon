@@ -11,7 +11,7 @@ Operate-mode ambient dashboard for the dedicated 1280x720 secondary display. The
 
 ## Audience, job, and content
 
-A developer working on the main display needs peripheral awareness of Mac health and GitHub Copilot project sessions. Show CPU, memory, storage, uptime, active projects, session state, current time, and Marietta weather. Live system and session data remain local; mock data is never presented as live.
+A developer working on the main display needs peripheral awareness of Mac health and GitHub Copilot project sessions across the Mac and paired computers. Show CPU, memory, storage, uptime, active projects, source host, session state, current time, and Marietta weather. Live system data remains local; relays expose only normalized session metadata; mock data is never presented as live.
 
 ## Direction and memorable moment
 

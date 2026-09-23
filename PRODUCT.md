@@ -26,11 +26,13 @@ AgentMon runs full-screen on a 1280x720 monitor housed in a case reminiscent of 
 
 - Show glanceable CPU, memory, and storage state.
 - Show GitHub Copilot project sessions, their current state, and the projects being worked on.
+- Consolidate paired Copilot sessions from other computers on the local network without transmitting prompts, source code, or raw events.
 - Include current weather as secondary ambient information.
 - Default weather to Marietta, Georgia 30066 while keeping the location configurable.
 - Optimize the primary surface for 1280x720 and continuous, unattended viewing.
 - Normal operation is passive; configuration and window management may be interactive outside the full-screen display.
 - The implementation approach for macOS packaging and access to Copilot session data remains open.
+- Remote session relays must use authenticated, certificate-pinned HTTPS and expose only normalized status metadata.
 
 ## Brand Commitments
 

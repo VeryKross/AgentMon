@@ -154,6 +154,10 @@ The dashboard has no navigation. Its top strip establishes place and time using 
 
 Every instrument is a fixed window with striped title chrome, centered title, close and zoom furniture, strong outer rule, and isolated hard-offset depth. Emphasized states replace stripes with solid Carbon Ink.
 
+### Network Session Row
+
+Every agent row ends with a compact source line: platform label, human-readable host name, and branch. MAC and PC labels make source identity glanceable without introducing color. Global priority still determines row order, so a remote session needing attention rises above routine local work.
+
 ### Weather Artwork
 
 Weather uses a complete one-bit scene vocabulary rather than one generic icon. Cloud mass increases visibly from mostly sunny through overcast; clear, mostly clear, partly cloudy, and mostly cloudy receive day/night celestial variants. Fog uses horizontal visibility bands, drizzle uses sparse dots, rain uses long diagonal strokes, snow uses asterisk flakes, and thunderstorms combine a heavy cloud, rain, and a bold lightning bolt.

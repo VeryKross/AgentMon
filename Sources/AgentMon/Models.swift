@@ -72,6 +72,34 @@ enum AgentActivity: String, Codable, Sendable {
   }
 }
 
+enum AgentHostPlatform: String, Codable, Sendable {
+  case macOS = "macos"
+  case windows
+  case unknown
+
+  var label: String {
+    switch self {
+    case .macOS: "MAC"
+    case .windows: "PC"
+    case .unknown: "HOST"
+    }
+  }
+}
+
+struct AgentHost: Identifiable, Equatable, Sendable {
+  let id: String
+  let name: String
+  let platform: AgentHostPlatform
+  let isLocal: Bool
+
+  static let local = AgentHost(
+    id: "local",
+    name: "This Mac",
+    platform: .macOS,
+    isLocal: true
+  )
+}
+
 struct AgentSession: Identifiable, Equatable, Sendable {
   let id: String
   let project: String
@@ -80,6 +108,40 @@ struct AgentSession: Identifiable, Equatable, Sendable {
   let branch: String?
   let activity: AgentActivity
   let updatedAt: Date
+  let host: AgentHost
+
+  init(
+    id: String,
+    project: String,
+    task: String,
+    repository: String?,
+    branch: String?,
+    activity: AgentActivity,
+    updatedAt: Date,
+    host: AgentHost = .local
+  ) {
+    self.id = id
+    self.project = project
+    self.task = task
+    self.repository = repository
+    self.branch = branch
+    self.activity = activity
+    self.updatedAt = updatedAt
+    self.host = host
+  }
+
+  func assigning(host: AgentHost) -> AgentSession {
+    AgentSession(
+      id: "\(host.id):\(id)",
+      project: project,
+      task: task,
+      repository: repository,
+      branch: branch,
+      activity: activity,
+      updatedAt: updatedAt,
+      host: host
+    )
+  }
 }
 
 struct WeatherSnapshot: Equatable, Sendable {
@@ -316,6 +378,9 @@ enum SettingsKeys {
   static let fillSecondaryDisplay = "fillSecondaryDisplay"
   static let computerName = "computerName"
   static let defaultWeatherLocation = "30066"
+  static let relayEnabled = "relayEnabled"
+  static let relayURL = "relayURL"
+  static let relayFingerprint = "relayFingerprint"
 }
 
 enum DisplayFormat {

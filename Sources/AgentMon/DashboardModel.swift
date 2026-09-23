@@ -1,6 +1,22 @@
 import Combine
 import Foundation
 
+enum RelayConnectionState: Equatable {
+  case disabled
+  case connecting
+  case connected(host: String)
+  case unavailable(message: String)
+
+  var description: String {
+    switch self {
+    case .disabled: "Remote relay is off."
+    case .connecting: "Connecting to the Windows relay…"
+    case .connected(let host): "Connected to \(host)."
+    case .unavailable(let message): message
+    }
+  }
+}
+
 @MainActor
 final class DashboardModel: ObservableObject {
   @Published private(set) var system = SystemSnapshot.placeholder
@@ -10,16 +26,23 @@ final class DashboardModel: ObservableObject {
   @Published private(set) var cpuHistory = [Double](repeating: 0, count: 28)
   @Published private(set) var memoryHistory = [Double](repeating: 0, count: 28)
   @Published private(set) var isRefreshing = false
+  @Published private(set) var relayState: RelayConnectionState = .disabled
 
   private let systemMonitor = SystemMonitor()
   private let sessionMonitor = CopilotSessionMonitor()
   private let weatherService = WeatherService()
+  private let relayClient = RelayClient()
   private let demoMode =
     ProcessInfo.processInfo.arguments.contains("--demo")
     || ProcessInfo.processInfo.environment["AGENTMON_DEMO_MODE"] == "1"
   private var timer: Timer?
   private var lastWeatherLocation = ""
   private var lastWeatherRefresh = Date.distantPast
+  private var lastRelayRefresh = Date.distantPast
+  private var localSessions: [AgentSession] = []
+  private var remoteSessions: [AgentSession] = []
+  private var remoteHost: AgentHost?
+  private var relayTask: Task<Void, Never>?
 
   var workingAgentCount: Int {
     sessions.filter { $0.activity == .working }.count
@@ -27,6 +50,20 @@ final class DashboardModel: ObservableObject {
 
   var attentionCount: Int {
     sessions.filter { $0.activity == .attention }.count
+  }
+
+  var hostCount: Int {
+    1 + (remoteHost == nil ? 0 : 1)
+  }
+
+  var hostSummary: String {
+    if remoteHost != nil {
+      return "\(hostCount) HOSTS • 1 REMOTE"
+    }
+    if case .unavailable = relayState {
+      return "1 HOST • REMOTE OFFLINE"
+    }
+    return "LOCAL HOST"
   }
 
   var summaryLine: String {
@@ -52,6 +89,8 @@ final class DashboardModel: ObservableObject {
   func stop() {
     timer?.invalidate()
     timer = nil
+    relayTask?.cancel()
+    relayTask = nil
   }
 
   func refresh(forceWeather: Bool = false) {
@@ -61,7 +100,17 @@ final class DashboardModel: ObservableObject {
     }
 
     system = systemMonitor.snapshot()
-    sessions = Array(sessionMonitor.sessions().prefix(10))
+    let localHost = AgentHost(
+      id: "local",
+      name: system.hostname,
+      platform: .macOS,
+      isLocal: true
+    )
+    localSessions = sessionMonitor.sessions()
+      .prefix(10)
+      .map { $0.assigning(host: localHost) }
+    mergeSessions()
+    refreshRelay()
     append(system.cpuPercent, to: &cpuHistory)
     append(system.memoryPercent, to: &memoryHistory)
 
@@ -78,6 +127,7 @@ final class DashboardModel: ObservableObject {
         weather = nil
         weatherError = nil
       }
+
       return
     }
 
@@ -95,6 +145,62 @@ final class DashboardModel: ObservableObject {
       }
       isRefreshing = false
     }
+  }
+
+  func refreshRelay(force: Bool = false) {
+    guard !demoMode else { return }
+
+    let defaults = UserDefaults.standard
+    guard defaults.bool(forKey: SettingsKeys.relayEnabled) else {
+      relayTask?.cancel()
+      relayTask = nil
+      remoteSessions = []
+      remoteHost = nil
+      relayState = .disabled
+      mergeSessions()
+      return
+    }
+
+    guard let configuration = RelayConfiguration.load() else {
+      remoteSessions = []
+      remoteHost = nil
+      relayState = .unavailable(message: "Complete the Windows relay pairing settings.")
+      mergeSessions()
+      return
+    }
+
+    let isDue = Date().timeIntervalSince(lastRelayRefresh) >= 3
+    guard relayTask == nil, force || isDue else { return }
+
+    lastRelayRefresh = .now
+    relayState = .connecting
+    relayTask = Task { [weak self] in
+      guard let self else { return }
+      do {
+        let snapshot = try await relayClient.fetchSnapshot(configuration: configuration)
+        guard !Task.isCancelled else { return }
+        remoteSessions = snapshot.agentSessions()
+        remoteHost = snapshot.agentHost
+        relayState = .connected(host: snapshot.host.name)
+      } catch {
+        guard !Task.isCancelled else { return }
+        remoteSessions = []
+        remoteHost = nil
+        relayState = .unavailable(message: error.localizedDescription)
+      }
+      mergeSessions()
+      relayTask = nil
+    }
+  }
+
+  private func mergeSessions() {
+    sessions = (localSessions + remoteSessions)
+      .sorted {
+        if $0.activity.sortOrder != $1.activity.sortOrder {
+          return $0.activity.sortOrder < $1.activity.sortOrder
+        }
+        return $0.updatedAt > $1.updatedAt
+      }
   }
 
   private func append(_ value: Double, to history: inout [Double]) {
@@ -115,7 +221,14 @@ final class DashboardModel: ObservableObject {
       hostname: "Ken's M4 Mini",
       sampledAt: now
     )
-    sessions = [
+    let mac = AgentHost(id: "demo-mac", name: "Ken's M4 Mini", platform: .macOS, isLocal: true)
+    let windows = AgentHost(
+      id: "demo-windows",
+      name: "Windows Desktop",
+      platform: .windows,
+      isLocal: false
+    )
+    localSessions = [
       AgentSession(
         id: "agentmon",
         project: "AgentMon",
@@ -123,7 +236,8 @@ final class DashboardModel: ObservableObject {
         repository: "VeryKross/AgentMon",
         branch: "main",
         activity: .working,
-        updatedAt: now
+        updatedAt: now,
+        host: mac
       ),
       AgentSession(
         id: "orbit-notes",
@@ -132,8 +246,11 @@ final class DashboardModel: ObservableObject {
         repository: "sample/OrbitNotes",
         branch: "feature/offline-sync",
         activity: .working,
-        updatedAt: now.addingTimeInterval(-180)
+        updatedAt: now.addingTimeInterval(-180),
+        host: mac
       ),
+    ]
+    remoteSessions = [
       AgentSession(
         id: "pixel-weather",
         project: "PixelWeather",
@@ -141,7 +258,8 @@ final class DashboardModel: ObservableObject {
         repository: "sample/PixelWeather",
         branch: "design/weather-icons",
         activity: .attention,
-        updatedAt: now.addingTimeInterval(-720)
+        updatedAt: now.addingTimeInterval(-720),
+        host: windows
       ),
       AgentSession(
         id: "tiny-build",
@@ -150,9 +268,13 @@ final class DashboardModel: ObservableObject {
         repository: "sample/TinyBuild",
         branch: "release/1.0",
         activity: .ready,
-        updatedAt: now.addingTimeInterval(-3_600)
+        updatedAt: now.addingTimeInterval(-3_600),
+        host: windows
       ),
     ]
+    remoteHost = windows
+    mergeSessions()
+    relayState = .connected(host: windows.name)
     weather = WeatherSnapshot(
       location: "Marietta, Georgia",
       temperature: 76,

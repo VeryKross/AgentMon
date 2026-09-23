@@ -214,7 +214,7 @@ private struct AgentDeskWindow: View {
           VStack(alignment: .leading, spacing: 4) {
             Text(dashboard.summaryLine)
               .font(RetroTheme.font(size: 24, weight: .bold))
-            Text("GITHUB COPILOT PROJECT SESSIONS")
+            Text("GITHUB COPILOT SESSIONS • \(dashboard.hostSummary)")
               .font(RetroTheme.font(size: 11, weight: .bold))
               .foregroundStyle(RetroTheme.muted)
           }
@@ -262,12 +262,14 @@ private struct AgentDeskWindow: View {
         Spacer(minLength: 0)
 
         HStack {
-          Text("LOCAL SESSION INDEX")
+          Text("NETWORK SESSION INDEX")
           Spacer()
           if dashboard.sessions.count > visibleSessions.count {
-            Text("+\(dashboard.sessions.count - visibleSessions.count) MORE IN DRAWER")
+            Text(
+              "\(dashboard.hostSummary) • +\(dashboard.sessions.count - visibleSessions.count) MORE"
+            )
           } else {
-            Text("\(dashboard.sessions.count) ON DESK")
+            Text("\(dashboard.hostSummary) • \(dashboard.sessions.count) ON DESK")
           }
         }
         .font(RetroTheme.font(size: 11, weight: .bold))
@@ -334,11 +336,9 @@ private struct AgentRow: View {
           .foregroundStyle(RetroTheme.muted)
           .lineLimit(1)
 
-        if let branch = session.branch, !branch.isEmpty {
-          Text(branch)
-            .font(RetroTheme.font(size: 10))
-            .lineLimit(1)
-        }
+        Text(hostLine)
+          .font(RetroTheme.font(size: 10))
+          .lineLimit(1)
       }
 
       Spacer(minLength: 8)
@@ -350,6 +350,12 @@ private struct AgentRow: View {
     .padding(.horizontal, 17)
     .frame(height: 104)
     .background(session.activity == .attention ? RetroTheme.ink.opacity(0.08) : Color.clear)
+  }
+
+  private var hostLine: String {
+    let host = "\(session.host.platform.label) • \(session.host.name)"
+    guard let branch = session.branch, !branch.isEmpty else { return host }
+    return "\(host) • \(branch)"
   }
 }
 
