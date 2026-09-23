@@ -53,6 +53,10 @@ Do not install this certificate as a broadly trusted root.
 The Windows sessions appear alongside local Mac sessions, labeled with the
 Windows host and branch. **Stop relay** or **Quit** makes the Mac report
 `REMOTE OFFLINE` without affecting local sessions.
+If a worktree session has no repository in its workspace metadata, the relay
+uses Git's worktree pointer to show the parent project's name rather than the
+worktree branch as the project label. The session title remains on the next
+line, and the branch remains in the host line.
 
 ## Startup and tray behavior
 
