@@ -94,6 +94,12 @@ final class DashboardWindowController {
     fill(window, on: targetScreen)
   }
 
+  func showDashboard() {
+    guard let window = NSApp.windows.first(where: { $0.title == "AgentMon" }) else { return }
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+  }
+
   func useWindowedMode() {
     guard let window = NSApp.windows.first(where: { $0.title == "AgentMon" }) else { return }
 

@@ -148,7 +148,7 @@ Most geometry is square and ruled with 1–3px strokes. Four-pixel rounding is r
 
 ### Navigation
 
-The dashboard has no navigation. Its top strip establishes place and time using desktop-menu grammar. Window management and settings live in the native menu-bar item.
+The top strip uses desktop-menu grammar and remains genuinely interactive. AgentMon opens Settings and Quit; Desk focuses the dashboard; Monitors fills the secondary display; Window returns to a normal resizable window. The native menu-bar extra duplicates these controls when visible.
 
 ### Retro Window
 
