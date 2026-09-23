@@ -5,6 +5,8 @@ internal sealed class RelayTrayContext : ApplicationContext
     private readonly IRelayController controller;
     private readonly NotifyIcon trayIcon;
     private readonly RelayForm form;
+    private readonly EventWaitHandle shutdownSignal;
+    private readonly System.Windows.Forms.Timer shutdownTimer;
     private bool quitting;
 
     internal RelayTrayContext(
@@ -15,6 +17,14 @@ internal sealed class RelayTrayContext : ApplicationContext
         this.controller = controller;
         form = new RelayForm(controller, QuitAsync, queryWindowsIntegration);
         form.RelayStateChanged += UpdateStatusPresentation;
+        shutdownSignal = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ShutdownEventName);
+        shutdownTimer = new System.Windows.Forms.Timer { Interval = 200 };
+        shutdownTimer.Tick += async (_, _) =>
+        {
+            if (shutdownSignal.WaitOne(0))
+                await QuitAsync();
+        };
+        shutdownTimer.Start();
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("&Open AgentMon Relay", null, (_, _) => ShowForm());
@@ -48,6 +58,9 @@ internal sealed class RelayTrayContext : ApplicationContext
     {
         if (disposing)
         {
+            shutdownTimer.Stop();
+            shutdownTimer.Dispose();
+            shutdownSignal.Dispose();
             trayIcon.Visible = false;
             trayIcon.Dispose();
             form.Dispose();

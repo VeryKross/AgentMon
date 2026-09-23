@@ -11,6 +11,11 @@ permissions:
 jobs:
   test-and-package:
     runs-on: windows-2022
+    env:
+      # Never expose signing credentials to pull-request code.
+      RELAY_SIGNING_PFX_BASE64: ${{ github.event_name != 'pull_request' && secrets.RELAY_SIGNING_PFX_BASE64 || '' }}
+      RELAY_SIGNING_PFX_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.RELAY_SIGNING_PFX_PASSWORD || '' }}
+      RELAY_SIGNING_TIMESTAMP_URL: ${{ vars.RELAY_SIGNING_TIMESTAMP_URL || 'http://timestamp.digicert.com' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -24,16 +29,40 @@ jobs:
       - name: Build and test Windows relay
         working-directory: Relay
         run: dotnet test .\AgentMon.Relay.Windows.Tests\AgentMon.Relay.Windows.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=windows-relay.trx"
-      - name: Publish self-contained x64 relay
-        run: .\scripts\publish-relay.ps1
-      - name: Verify ARM64 publishing compatibility
-        run: .\scripts\publish-relay.ps1 -Runtime win-arm64
+      - name: Install checksum-pinned Inno Setup compiler
+        run: .\scripts\install-inno-setup.ps1
+      - name: Publish x64 installer and portable relay
+        run: .\scripts\publish-relay.ps1 -Installer
+      - name: Publish ARM64 installer and portable relay
+        run: .\scripts\publish-relay.ps1 -Runtime win-arm64 -Installer
+      - name: Verify release artifacts
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content .\Relay\AgentMon.Relay.Windows\AgentMon.Relay.Windows.csproj
+          $version = [string]$project.Project.PropertyGroup.Version
+          .\scripts\test-relay-artifacts.ps1 -Version $version
+          "RELAY_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Build older fixture for upgrade and downgrade coverage
+        shell: pwsh
+        run: |
+          .\scripts\publish-relay.ps1 -Installer -Version 0.1.9
+          New-Item -ItemType Directory .\dist\installer-test-inputs -Force | Out-Null
+          Get-ChildItem .\dist -File -Filter 'AgentMonRelay-0.1.9-*' |
+            Move-Item -Destination .\dist\installer-test-inputs
+      - name: Test installer lifecycle as a disposable standard user
+        shell: pwsh
+        run: |
+          $old = (Get-ChildItem .\dist\installer-test-inputs -Filter '*-win-x64-*-Setup.exe').FullName
+          $new = (Get-ChildItem .\dist -Filter "AgentMonRelay-$env:RELAY_VERSION-win-x64-*-Setup.exe").FullName
+          .\scripts\test-relay-installer.ps1 -OldSetup $old -NewSetup $new -ExpectedVersion $env:RELAY_VERSION
       - uses: actions/upload-artifact@v4
         with:
           name: AgentMonRelay-Windows
           path: |
             dist/AgentMonRelay-*.zip
             dist/AgentMonRelay-*.zip.sha256
+            dist/AgentMonRelay-*-Setup.exe
+            dist/AgentMonRelay-*-Setup.exe.sha256
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
