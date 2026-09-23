@@ -11,6 +11,8 @@
     <AssemblyName>AgentMonRelay</AssemblyName>
     <RootNamespace>AgentMon.Relay.Windows</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
@@ -19,4 +21,15 @@
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <InternalsVisibleTo Include="AgentMon.Relay.Windows.Tests" />
   </ItemGroup>
+  <Target Name="CopyRuntimeNotices" AfterTargets="Publish">
+    <Copy SourceFiles="%(ResolvedRuntimePack.PackageDirectory)\THIRD-PARTY-NOTICES.TXT"
+          DestinationFiles="$(PublishDir)%(ResolvedRuntimePack.FrameworkName)-NOTICES.txt"
+          Condition="Exists('%(ResolvedRuntimePack.PackageDirectory)\THIRD-PARTY-NOTICES.TXT')" />
+    <Copy SourceFiles="%(ResolvedRuntimePack.PackageDirectory)\LICENSE.TXT"
+          DestinationFiles="$(PublishDir)%(ResolvedRuntimePack.FrameworkName)-LICENSE.txt"
+          Condition="Exists('%(ResolvedRuntimePack.PackageDirectory)\LICENSE.TXT')" />
+    <Copy SourceFiles="%(ResolvedRuntimePack.PackageDirectory)\LICENSE"
+          DestinationFiles="$(PublishDir)%(ResolvedRuntimePack.FrameworkName)-LICENSE.txt"
+          Condition="Exists('%(ResolvedRuntimePack.PackageDirectory)\LICENSE')" />
+  </Target>
 </Project>

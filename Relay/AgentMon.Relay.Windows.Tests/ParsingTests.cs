@@ -44,6 +44,15 @@ public sealed class ParsingTests
     }
 
     [TestMethod]
+    public void Normalize_BlankWorkspaceTitle_ProducesNonemptyTaskAcceptedByMac()
+    {
+        var fields = WorkspaceReader.Parse("id: test\nname: '   '\n");
+        var session = WorkspaceReader.Normalize(fields, TestDirectory.Now, "ready");
+        Assert.AreEqual("Copilot session", session.Task);
+        Assert.AreEqual("Untitled Project", session.Project);
+    }
+
+    [TestMethod]
     [DataRow("""{"type":"assistant.turn_start"}""", true, "working")]
     [DataRow("""{"type":"assistant.turn_end"}""", true, "ready")]
     [DataRow("""{"type":"assistant.turn_start"}""", false, "offline")]

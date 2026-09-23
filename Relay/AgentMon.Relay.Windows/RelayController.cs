@@ -23,6 +23,7 @@ internal sealed class RelayController : IRelayController
     private MdnsAdvertisement? discovery;
     private IReadOnlyList<PrivateAddress> bindings = [];
     private bool disposed;
+    private bool indexingFailed;
 
     internal RelayController(ProtectedSettingsStore store, SafeLog log, string sessionRoot,
         IPrivateNetworkProvider? networks = null)
@@ -46,7 +47,7 @@ internal sealed class RelayController : IRelayController
             DisplayName = Volatile.Read(ref settings).DisplayName,
             SessionCount = snapshot?.Sessions.Count ?? 0,
             LastIndexedAt = snapshot?.GeneratedAt,
-            Error = current.Error ?? (indexer.LastScanFailed ? "Indexing failed; serving the last successful snapshot." :
+            Error = current.Error ?? (Volatile.Read(ref indexingFailed) ? "Indexing failed; serving the last successful snapshot." :
                 log.WriteFailed ? "The log could not be written. Check your local application data permissions." : null)
         };
     }
@@ -160,13 +161,14 @@ internal sealed class RelayController : IRelayController
             var current = Volatile.Read(ref settings);
             try
             {
-                indexer.Scan(new RelayHost(current.HostId, current.DisplayName), DateTimeOffset.UtcNow);
+                Volatile.Write(ref indexingFailed,
+                    !indexer.Scan(new RelayHost(current.HostId, current.DisplayName), DateTimeOffset.UtcNow));
             }
             catch (Exception ex)
             {
                 // Keep the poller alive, but never publish a fabricated successful scan.
                 log.Write(LogEvent.IndexFailed, ex);
-                Volatile.Write(ref view, view with { Error = "Indexing failed; serving the last successful snapshot." });
+                Volatile.Write(ref indexingFailed, true);
             }
         } while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false));
     }
@@ -222,7 +224,14 @@ internal sealed class RelayController : IRelayController
         catch (Exception ex)
         {
             log.Write(LogEvent.ListenerFailed, ex);
-            await StopListenerAsync().ConfigureAwait(false);
+            try
+            {
+                await StopListenerAsync().ConfigureAwait(false);
+            }
+            catch (Exception cleanupError)
+            {
+                log.Write(LogEvent.ListenerFailed, cleanupError);
+            }
             Volatile.Write(ref view, view with
             {
                 State = "Error", Urls = [], DiscoveryStatus = "Not advertising",

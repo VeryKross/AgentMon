@@ -66,6 +66,8 @@ internal static class WorkspaceReader
             project = "Untitled Project";
         var name = fields.GetValueOrDefault("name", "Copilot session");
         var task = string.Join(' ', name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        if (task.Length == 0)
+            task = "Copilot session";
         task = string.Concat(task.EnumerateRunes().Take(120).Select(rune => rune.ToString()));
         return new RelaySession(fields["id"], project, task, repository, branch, activity, updatedAt);
     }

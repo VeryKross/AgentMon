@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -46,6 +47,25 @@ internal sealed class RelayServer : IAsyncDisposable
                 options.Listen(address, port, listen =>
                 {
                     listen.Protocols = HttpProtocols.Http1;
+                    listen.Use(next => async connection =>
+                    {
+                        try
+                        {
+                            var local = (connection.LocalEndPoint as IPEndPoint)?.Address;
+                            var remote = (connection.RemoteEndPoint as IPEndPoint)?.Address;
+                            if (!allowed(local, remote))
+                            {
+                                connection.Abort();
+                                return;
+                            }
+                            await next(connection);
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Write(LogEvent.RequestFailed, ex);
+                            connection.Abort();
+                        }
+                    });
                     listen.UseHttps(https =>
                     {
                         https.ServerCertificate = certificate;

@@ -10,6 +10,9 @@ internal sealed record PrivateAddress(IPAddress Address, int PrefixLength, uint 
 {
     internal bool Contains(IPAddress remote)
     {
+        if (PrefixLength is <= 0 or > 32 ||
+            (remote.AddressFamily != AddressFamily.InterNetwork && !remote.IsIPv4MappedToIPv6))
+            return false;
         var localBytes = Address.GetAddressBytes();
         var remoteBytes = remote.MapToIPv4().GetAddressBytes();
         if (localBytes.Length != remoteBytes.Length)
@@ -32,6 +35,7 @@ internal sealed class PrivateNetworkProvider : IPrivateNetworkProvider
         var allowed = PrivateAdapters();
         return NetworkInterface.GetAllNetworkInterfaces()
             .Where(adapter => adapter.OperationalStatus == OperationalStatus.Up &&
+                              adapter.Supports(NetworkInterfaceComponent.IPv4) &&
                               Guid.TryParse(adapter.Id, out var id) && allowed.Contains(id))
             .SelectMany(adapter =>
             {

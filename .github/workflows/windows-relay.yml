@@ -1,0 +1,42 @@
+name: Windows Relay
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: Relay/global.json
+          cache: true
+          cache-dependency-path: Relay/**/packages.lock.json
+      - name: Restore locked dependencies
+        working-directory: Relay
+        run: dotnet restore .\AgentMon.Relay.Windows.Tests\AgentMon.Relay.Windows.Tests.csproj --locked-mode
+      - name: Build and test Windows relay
+        working-directory: Relay
+        run: dotnet test .\AgentMon.Relay.Windows.Tests\AgentMon.Relay.Windows.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=windows-relay.trx"
+      - name: Publish self-contained x64 relay
+        run: .\scripts\publish-relay.ps1
+      - name: Verify ARM64 publishing compatibility
+        run: .\scripts\publish-relay.ps1 -Runtime win-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AgentMonRelay-Windows
+          path: |
+            dist/AgentMonRelay-*.zip
+            dist/AgentMonRelay-*.zip.sha256
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-relay-test-results
+          path: Relay/AgentMon.Relay.Windows.Tests/TestResults/*.trx
