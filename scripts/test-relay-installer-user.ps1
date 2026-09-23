@@ -15,8 +15,23 @@ if ($identity.Name.Split('\')[-1] -ne $ExpectedUser -or $ExpectedUser -notmatch 
     $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Installer tests require their disposable non-administrator account.'
 }
+# Start-Process -Credential can inherit the launcher's profile environment.
+# Resolve the loaded profile by the child's token SID before any installer or app starts.
+$profileKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$($identity.User.Value)"
+$profile = [Environment]::ExpandEnvironmentVariables((Get-ItemPropertyValue $profileKey -Name ProfileImagePath))
+if (-not $profile -or (Split-Path $profile -Leaf) -ne $ExpectedUser) {
+    throw 'The disposable account profile could not be verified.'
+}
+$env:USERPROFILE = $profile
+$env:USERNAME = $ExpectedUser
+$env:APPDATA = Join-Path $profile 'AppData\Roaming'
+$env:LOCALAPPDATA = Join-Path $profile 'AppData\Local'
+$env:TEMP = Join-Path $env:LOCALAPPDATA 'Temp'
+$env:TMP = $env:TEMP
+New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
 $localData = [Environment]::GetFolderPath(
     [Environment+SpecialFolder]::LocalApplicationData, [Environment+SpecialFolderOption]::Create)
+if (-not $localData -or $localData -ne $env:LOCALAPPDATA) { throw 'Disposable local data folder resolution failed.' }
 $install = Join-Path $localData 'Programs\AgentMonRelay'
 $data = Join-Path $localData 'AgentMonRelay'
 $exe = Join-Path $install 'AgentMonRelay.exe'

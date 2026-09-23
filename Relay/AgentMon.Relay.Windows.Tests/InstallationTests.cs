@@ -48,11 +48,12 @@ public sealed class InstallationTests
     [TestMethod]
     public void RunningInstance_BlocksMaintenance()
     {
-        using var mutex = new Mutex(true, Program.InstanceMutexName, out var owned);
+        var name = $"Local\\AgentMonRelay-Test-{Guid.NewGuid():N}";
+        using var mutex = new Mutex(true, name, out var owned);
         Assert.IsTrue(owned);
-        Assert.IsTrue(InstallationMaintenance.TryRun(["--check-not-running"], out var code));
+        Assert.IsTrue(InstallationMaintenance.TryRun(["--check-not-running"], out var code, name));
         Assert.AreEqual(1, code);
-        Assert.IsTrue(InstallationMaintenance.TryRun(["--remove-user-data"], out code));
+        Assert.IsTrue(InstallationMaintenance.TryRun(["--remove-user-data"], out code, name));
         Assert.AreEqual(1, code);
     }
 

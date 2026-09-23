@@ -7,8 +7,9 @@ internal static class InstallationMaintenance
     internal static string Version => typeof(Program).Assembly.GetName().Version?.ToString(3)
         ?? throw new InvalidOperationException("Application version is unavailable.");
 
-    internal static bool TryRun(string[] args, out int exitCode)
+    internal static bool TryRun(string[] args, out int exitCode, string? instanceMutexName = null)
     {
+        instanceMutexName ??= Program.InstanceMutexName;
         exitCode = 0;
         if (args.Length == 0 || args[0] is not
             ("--version" or "--shutdown" or "--check-not-running" or "--uninstall-cleanup" or "--remove-firewall" or "--remove-user-data"))
@@ -30,7 +31,7 @@ internal static class InstallationMaintenance
             }
             if (args[0] == "--shutdown")
             {
-                if (!Mutex.TryOpenExisting(Program.InstanceMutexName, out var running))
+                if (!Mutex.TryOpenExisting(instanceMutexName, out var running))
                     return true;
                 using (running)
                 using (var shutdown = EventWaitHandle.OpenExisting(Program.ShutdownEventName))
@@ -50,7 +51,7 @@ internal static class InstallationMaintenance
                 return true;
             }
 
-            using var mutex = new Mutex(true, Program.InstanceMutexName, out var ownsMutex);
+            using var mutex = new Mutex(true, instanceMutexName, out var ownsMutex);
             if (!ownsMutex)
                 throw new InvalidOperationException("Quit AgentMon Relay from its tray menu first.");
 
