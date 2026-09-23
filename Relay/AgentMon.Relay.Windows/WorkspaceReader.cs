@@ -61,7 +61,7 @@ internal static class WorkspaceReader
         fields.TryGetValue("branch", out var branch);
         var project = repository?.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
         if (string.IsNullOrWhiteSpace(project) && fields.TryGetValue("cwd", out var cwd))
-            project = cwd.TrimEnd('\\', '/').Split('\\', '/').LastOrDefault();
+            project = ProjectFromWorktree(cwd) ?? cwd.TrimEnd('\\', '/').Split('\\', '/').LastOrDefault();
         if (string.IsNullOrWhiteSpace(project))
             project = "Untitled Project";
         var name = fields.GetValueOrDefault("name", "Copilot session");
@@ -70,6 +70,43 @@ internal static class WorkspaceReader
             task = "Copilot session";
         task = string.Concat(task.EnumerateRunes().Take(120).Select(rune => rune.ToString()));
         return new RelaySession(fields["id"], project, task, repository, branch, activity, updatedAt);
+    }
+
+    private static string? ProjectFromWorktree(string cwd)
+    {
+        if (!Path.IsPathFullyQualified(cwd))
+            return null;
+        var pointerPath = Path.Combine(cwd, ".git");
+        if (!File.Exists(pointerPath) || File.GetAttributes(pointerPath).HasFlag(FileAttributes.ReparsePoint) ||
+            new FileInfo(pointerPath).Length > 4096)
+            return null;
+
+        var pointer = File.ReadAllText(pointerPath).Trim();
+        if (!pointer.StartsWith("gitdir: ", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var gitDirPath = pointer["gitdir: ".Length..].Trim();
+        if (gitDirPath.Length == 0)
+            return null;
+
+        try
+        {
+            var gitDir = Path.GetFullPath(gitDirPath, cwd);
+            var commonPath = Path.Combine(gitDir, "commondir");
+            if (!File.Exists(commonPath) || File.GetAttributes(commonPath).HasFlag(FileAttributes.ReparsePoint) ||
+                new FileInfo(commonPath).Length > 4096)
+                return null;
+            var common = File.ReadAllText(commonPath).Trim();
+            if (common.Length == 0)
+                return null;
+            var commonDir = Path.GetFullPath(common, gitDir);
+            return Path.GetFileName(commonDir).Equals(".git", StringComparison.OrdinalIgnoreCase)
+                ? Path.GetFileName(Path.GetDirectoryName(commonDir))
+                : null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     internal static DateTimeOffset? UpdatedAt(Dictionary<string, string> fields)

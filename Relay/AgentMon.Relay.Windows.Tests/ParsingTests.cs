@@ -53,6 +53,37 @@ public sealed class ParsingTests
     }
 
     [TestMethod]
+    public void Normalize_WorktreeWithoutRepository_UsesCommonGitProjectInsteadOfBranch()
+    {
+        using var temp = new TestDirectory();
+        var project = Path.Combine(temp.Root, "BadCatAgent");
+        var gitDir = Path.Combine(project, ".git", "worktrees", "verykross-verbose-journey");
+        Directory.CreateDirectory(gitDir);
+        File.WriteAllText(Path.Combine(gitDir, "commondir"), "../..");
+        var worktree = Path.Combine(temp.Root, "verykross-verbose-journey");
+        Directory.CreateDirectory(worktree);
+        File.WriteAllText(Path.Combine(worktree, ".git"), $"gitdir: {gitDir}");
+
+        var fields = new Dictionary<string, string>
+        {
+            ["id"] = "test",
+            ["cwd"] = worktree,
+            ["branch"] = "verykross-verbose-journey",
+            ["name"] = "Bad cat agent"
+        };
+        var session = WorkspaceReader.Normalize(fields, TestDirectory.Now, "ready");
+        Assert.AreEqual("BadCatAgent", session.Project);
+        Assert.AreEqual("Bad cat agent", session.Task);
+        Assert.AreEqual("verykross-verbose-journey", session.Branch);
+
+        File.WriteAllText(Path.Combine(worktree, ".git"), $"gitdir: {Path.GetRelativePath(worktree, gitDir)}");
+        Assert.AreEqual("BadCatAgent", WorkspaceReader.Normalize(fields, TestDirectory.Now, "ready").Project);
+
+        fields["repository"] = "VeryKross/CanonicalRepo";
+        Assert.AreEqual("CanonicalRepo", WorkspaceReader.Normalize(fields, TestDirectory.Now, "ready").Project);
+    }
+
+    [TestMethod]
     [DataRow("""{"type":"assistant.turn_start"}""", true, "working")]
     [DataRow("""{"type":"assistant.turn_end"}""", true, "ready")]
     [DataRow("""{"type":"assistant.turn_start"}""", false, "offline")]
