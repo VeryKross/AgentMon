@@ -107,7 +107,15 @@ AgentMon can merge sessions from a Windows companion on the same private network
 
 The versioned contract is documented in [`docs/relay-protocol-v1.md`](docs/relay-protocol-v1.md). It defines the privacy boundary, authenticated transport, snapshot fields, activity semantics, freshness requirements, and expected HTTP behavior.
 
-The initial Windows companion is tracked in [the Windows relay implementation issue](https://github.com/VeryKross/AgentMon/issues/1) so it can be built and tested natively on Windows. Until that companion is installed, leave the relay setting disabled.
+The native Windows companion lives in `Relay/AgentMon.Relay.Windows`. It provides
+a tray UI, protected persistent pairing credentials, a Private-network-only HTTPS
+listener, and bounded local Copilot indexing. Build a self-contained Windows
+archive with `.\scripts\publish-relay.ps1`, or use the Windows Relay workflow's
+artifacts. No separately installed .NET runtime is required.
+
+See [Windows installation, pairing, privacy, and removal](docs/windows-relay.md).
+The initial portable Windows build is unsigned and supports IPv4 private LANs;
+startup and the narrowly scoped firewall rule are explicit opt-in actions.
 
 ## How agent status works
 
@@ -128,10 +136,12 @@ This directory is an implementation detail of GitHub Copilot rather than a publi
 |---|---|
 | `make test` | Builds the project and runs the test suite |
 | `make test-relay` | Verifies authenticated, certificate-pinned HTTPS against a local mock relay |
+| `python3 -B -m unittest discover -s scripts -p test_mock_relay.py` | Tests HTTPS mock authentication and idle-connection handling without Swift |
 | `make app` | Produces `.build/AgentMon.app` |
 | `make dmg` | Produces `dist/AgentMon.dmg` |
 | `make run` | Runs AgentMon from Swift Package Manager |
 | `make demo` | Runs with sanitized sample data |
+| `.\scripts\publish-relay.ps1` (Windows) | Produces a self-contained Windows x64 relay ZIP and checksum |
 
 ## Project structure
 
@@ -150,4 +160,5 @@ Sources/AgentMon/
 └── RetroTheme.swift
 ```
 
-AgentMon has no third-party runtime dependencies.
+The macOS app has no third-party runtime dependencies. The Windows companion
+bundles .NET 8 and YamlDotNet; see `Relay/THIRD-PARTY-NOTICES.txt`.

@@ -4,7 +4,7 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 TEMP_DIR=$(mktemp -d)
 TOKEN="agentmon-test-token"
-PORT=47831
+READY_FILE="$TEMP_DIR/relay-port"
 SERVER_PID=""
 
 cleanup() {
@@ -37,12 +37,32 @@ python3 "$ROOT_DIR/scripts/mock-relay.py" \
   --cert "$TEMP_DIR/cert.pem" \
   --key "$TEMP_DIR/key.pem" \
   --token "$TOKEN" \
-  --port "$PORT" &
+  --port 0 \
+  --ready-file "$READY_FILE" &
 SERVER_PID=$!
-sleep 1
+
+ATTEMPTS=0
+while [ ! -s "$READY_FILE" ]; do
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "Mock relay exited before becoming ready." >&2
+    exit 1
+  fi
+  ATTEMPTS=$((ATTEMPTS + 1))
+  if [ "$ATTEMPTS" -ge 50 ]; then
+    echo "Mock relay did not become ready within five seconds." >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+PORT=$(cat "$READY_FILE")
+
+curl --silent --show-error --fail --noproxy '*' \
+  --max-time 5 --cacert "$TEMP_DIR/cert.pem" \
+  --header "Authorization: Bearer $TOKEN" \
+  "https://127.0.0.1:$PORT/v1/status" >/dev/null
 
 cd "$ROOT_DIR"
-AGENTMON_TEST_RELAY_URL="https://localhost:$PORT" \
+AGENTMON_TEST_RELAY_URL="https://127.0.0.1:$PORT" \
 AGENTMON_TEST_RELAY_TOKEN="$TOKEN" \
 AGENTMON_TEST_RELAY_FINGERPRINT="$FINGERPRINT" \
 swift test --filter fetchesPinnedRelaySnapshot
