@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text;
 
 namespace AgentMon.Relay.Windows;
 
@@ -286,6 +287,13 @@ internal sealed class RelayForm : Form
             if (name.Length == 0)
             {
                 ShowInformation("Enter a computer name first.");
+                displayNameTextBox.Focus();
+                return;
+            }
+
+            if (name.Any(char.IsControl) || name.EnumerateRunes().Take(121).Count() > 120)
+            {
+                ShowInformation("Use a computer name with 1 to 120 characters and no control characters.");
                 displayNameTextBox.Focus();
                 return;
             }
