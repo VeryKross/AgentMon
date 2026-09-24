@@ -6,10 +6,17 @@ internal static class Program
 {
     private const string ConfigureFirewallArgument = "--configure-firewall";
     private const string BackgroundArgument = "--background";
+    internal static string InstanceMutexName => $"Local\\AgentMonRelay-{GetCurrentUserSid()}";
+    internal static string ShutdownEventName => $"Local\\AgentMonRelay-Quit-{GetCurrentUserSid()}";
 
     [STAThread]
     private static int Main(string[] args)
     {
+        if (InstallationMaintenance.TryRun(args, out var exitCode))
+        {
+            return exitCode;
+        }
+
         if (args.Length == 1 &&
             string.Equals(args[0], ConfigureFirewallArgument, StringComparison.OrdinalIgnoreCase))
         {
@@ -20,7 +27,7 @@ internal static class Program
 
         using var mutex = new Mutex(
             initiallyOwned: true,
-            $"Local\\AgentMonRelay-{GetCurrentUserSid()}",
+            InstanceMutexName,
             out var ownsMutex);
 
         if (!ownsMutex)
