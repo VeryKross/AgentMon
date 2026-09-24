@@ -22,6 +22,30 @@ import Testing
   #expect(fields["name"] == "Retro status dashboard")
 }
 
+@Test func labelsStandaloneChatWithoutHidingProjectSessions() {
+  var fields = WorkspaceYAMLParser.parse("""
+    id: chat
+    cwd: /tmp/studious-meme-4bae8aac
+    name: 'A chat about build issues'
+    """)
+  #expect(CopilotSessionMonitor.projectName(from: fields) == "Copilot Chat")
+
+  fields["branch"] = "studious-meme-4bae8aac"
+  #expect(CopilotSessionMonitor.projectName(from: fields) == "studious-meme-4bae8aac")
+  fields.removeValue(forKey: "branch")
+
+  fields["git_root"] = "/tmp/AgentMon"
+  #expect(CopilotSessionMonitor.projectName(from: fields) == "studious-meme-4bae8aac")
+  fields.removeValue(forKey: "git_root")
+
+  fields["repository"] = "VeryKross/AgentMon"
+  #expect(CopilotSessionMonitor.projectName(from: fields) == "AgentMon")
+  fields.removeValue(forKey: "repository")
+
+  fields["cwd"] = "/tmp/ordinary-folder"
+  #expect(CopilotSessionMonitor.projectName(from: fields) == "ordinary-folder")
+}
+
 @Test func detectsWorkingAgentFromUnfinishedTurn() throws {
   let events = """
     {"type":"assistant.turn_end"}
@@ -87,6 +111,42 @@ import Testing
   )
 
   #expect(activity == .ready)
+}
+
+@Test func keepsUnansweredQuestionUntilAnsweredOrOfflineDespiteInactivity() {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  let stale = now.addingTimeInterval(-2 * 3_600)
+  let events = """
+    {"type":"assistant.turn_start"}
+    {"type":"tool.execution_start","data":{"toolCallId":"question-1","toolName":"ask_user"}}
+    """
+
+  #expect(AgentEventParser.activity(
+    from: Data(events.utf8),
+    hasLiveProcess: true,
+    updatedAt: stale,
+    now: now
+  ) == .attention)
+  #expect(AgentEventParser.activity(
+    from: Data(events.utf8),
+    hasLiveProcess: false,
+    updatedAt: stale,
+    now: now
+  ) == .offline)
+  #expect(AgentEventParser.activity(
+    from: Data((events + "\n" + """
+      {"type":"tool.execution_complete","data":{"toolCallId":"question-1"}}
+      """).utf8),
+    hasLiveProcess: true,
+    updatedAt: stale,
+    now: now
+  ) == .ready)
+  #expect(AgentEventParser.activity(
+    from: Data(#"{"type":"assistant.turn_start"}"#.utf8),
+    hasLiveProcess: true,
+    updatedAt: stale,
+    now: now
+  ) == .ready)
 }
 
 @Test func treatsMissingProcessAsOffline() {

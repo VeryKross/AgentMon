@@ -53,13 +53,7 @@ struct CopilotSessionMonitor {
     )
 
     let repository = fields["repository"]
-    let cwd = fields["cwd"] ?? ""
-    let project =
-      repository?
-      .split(separator: "/").last.map(String.init)
-      ?? URL(fileURLWithPath: cwd).lastPathComponent.nonEmpty
-      ?? "Untitled Project"
-
+    let project = Self.projectName(from: fields)
     let rawName = fields["name"] ?? "Copilot session"
     let task = conciseTaskName(rawName, project: project)
 
@@ -72,6 +66,24 @@ struct CopilotSessionMonitor {
       activity: activity,
       updatedAt: updatedAt
     )
+  }
+
+  static func projectName(from fields: [String: String]) -> String {
+    if let repositoryName = fields["repository"]?.split(separator: "/").last {
+      return String(repositoryName)
+    }
+
+    let cwd = fields["cwd"] ?? ""
+    let directory = URL(fileURLWithPath: cwd)
+    let name = directory.lastPathComponent
+    if fields["branch"] == nil,
+      fields["git_root"] == nil,
+      name.range(of: "^[a-z]+-[a-z]+-[0-9a-f]{8}$", options: .regularExpression) != nil,
+      !FileManager.default.fileExists(atPath: directory.appendingPathComponent(".git").path)
+    {
+      return "Copilot Chat"
+    }
+    return name.nonEmpty ?? "Untitled Project"
   }
 
   private func modificationDate(for url: URL) -> Date {
@@ -121,7 +133,7 @@ struct CopilotSessionMonitor {
       return cleaned
     }
 
-    if cleaned.localizedCaseInsensitiveContains(project) {
+    if project != "Copilot Chat" && cleaned.localizedCaseInsensitiveContains(project) {
       return "Copilot project session"
     }
 
@@ -167,7 +179,6 @@ enum AgentEventParser {
     guard hasLiveProcess else { return .offline }
 
     let recent = now.timeIntervalSince(updatedAt) < 15 * 60
-    guard recent else { return .ready }
 
     let lines = data.split(separator: 0x0A).reversed()
     var completedToolCalls = Set<String>()
@@ -195,7 +206,7 @@ enum AgentEventParser {
       }
 
       if type == "assistant.turn_start" {
-        return .working
+        return recent ? .working : .ready
       }
       if type == "assistant.turn_end" {
         return .ready

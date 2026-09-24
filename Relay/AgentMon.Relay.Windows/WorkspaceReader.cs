@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
 
@@ -9,7 +10,7 @@ internal static class WorkspaceReader
 {
     internal const int MaximumBytes = 256 * 1024;
     private static readonly HashSet<string> AllowedKeys =
-        ["id", "cwd", "repository", "branch", "name", "updated_at"];
+        ["id", "cwd", "git_root", "repository", "branch", "name", "updated_at"];
 
     internal static Dictionary<string, string> Parse(string source)
     {
@@ -61,7 +62,14 @@ internal static class WorkspaceReader
         fields.TryGetValue("branch", out var branch);
         var project = repository?.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
         if (string.IsNullOrWhiteSpace(project) && fields.TryGetValue("cwd", out var cwd))
-            project = ProjectFromWorktree(cwd) ?? cwd.TrimEnd('\\', '/').Split('\\', '/').LastOrDefault();
+        {
+            var directoryName = cwd.TrimEnd('\\', '/').Split('\\', '/').LastOrDefault();
+            project = ProjectFromWorktree(cwd) ??
+                (directoryName is not null && string.IsNullOrWhiteSpace(branch) &&
+                 !fields.ContainsKey("git_root") &&
+                 Regex.IsMatch(directoryName, @"^[a-z]+-[a-z]+-[0-9a-f]{8}$", RegexOptions.CultureInvariant)
+                    ? "Copilot Chat" : directoryName);
+        }
         if (string.IsNullOrWhiteSpace(project))
             project = "Untitled Project";
         var name = fields.GetValueOrDefault("name", "Copilot session");
