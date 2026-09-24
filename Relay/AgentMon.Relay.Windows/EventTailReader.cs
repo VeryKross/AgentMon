@@ -27,8 +27,7 @@ internal static class EventTailReader
     {
         if (!live)
             return "offline";
-        if (now - updatedAt >= TimeSpan.FromMinutes(15))
-            return "ready";
+        var recent = now - updatedAt < TimeSpan.FromMinutes(15);
 
         var completed = new HashSet<string>(StringComparer.Ordinal);
         var end = tail.Length;
@@ -56,7 +55,7 @@ internal static class EventTailReader
                     return "attention";
                 }
                 else if (type == "assistant.turn_start")
-                    return "working";
+                    return recent ? "working" : "ready";
                 else if (type == "assistant.turn_end")
                     return "ready";
             }

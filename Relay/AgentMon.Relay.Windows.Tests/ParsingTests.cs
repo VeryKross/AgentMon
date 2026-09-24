@@ -13,6 +13,7 @@ public sealed class ParsingTests
         var fields = WorkspaceReader.Parse("""
             id: test
             cwd: 'C:\Projects\AgentMon'
+            git_root: 'C:\Projects\AgentMon'
             repository: "VeryKross/AgentMon"
             branch: 'fix/ken''s-branch'
             name: "Build: relay\nnow \u263a"
@@ -23,10 +24,11 @@ public sealed class ParsingTests
             prompt: SECRET_PROMPT
             """);
 
-        Assert.AreEqual(6, fields.Count);
+        Assert.AreEqual(7, fields.Count);
         Assert.AreEqual("fix/ken's-branch", fields["branch"]);
         Assert.AreEqual("Build: relay\nnow \u263a", fields["name"]);
         Assert.AreEqual(@"C:\Projects\AgentMon", fields["cwd"]);
+        Assert.AreEqual(@"C:\Projects\AgentMon", fields["git_root"]);
         Assert.AreEqual(TimeSpan.Zero, WorkspaceReader.UpdatedAt(fields)!.Value.Offset);
     }
 
@@ -84,6 +86,32 @@ public sealed class ParsingTests
     }
 
     [TestMethod]
+    public void Normalize_StandaloneChatWithGeneratedDirectory_UsesChatLabelAndKeepsSubject()
+    {
+        var fields = WorkspaceReader.Parse("""
+            id: chat
+            cwd: 'C:\Copilot\worktrees\cautious-system-0de85394'
+            name: 'Review the deployment plan'
+            """);
+
+        var chat = WorkspaceReader.Normalize(fields, TestDirectory.Now, "ready");
+        Assert.AreEqual("Copilot Chat", chat.Project);
+        Assert.AreEqual("Review the deployment plan", chat.Task);
+        Assert.IsNull(chat.Branch);
+
+        fields["branch"] = "cautious-system-0de85394";
+        Assert.AreEqual("cautious-system-0de85394", WorkspaceReader.Normalize(fields, TestDirectory.Now, "ready").Project);
+        fields.Remove("branch");
+
+        fields["git_root"] = @"C:\Projects\Project";
+        Assert.AreEqual("cautious-system-0de85394", WorkspaceReader.Normalize(fields, TestDirectory.Now, "ready").Project);
+        fields.Remove("git_root");
+
+        fields["repository"] = "VeryKross/BadCatAgent";
+        Assert.AreEqual("BadCatAgent", WorkspaceReader.Normalize(fields, TestDirectory.Now, "ready").Project);
+    }
+
+    [TestMethod]
     [DataRow("""{"type":"assistant.turn_start"}""", true, "working")]
     [DataRow("""{"type":"assistant.turn_end"}""", true, "ready")]
     [DataRow("""{"type":"assistant.turn_start"}""", false, "offline")]
@@ -115,6 +143,21 @@ public sealed class ParsingTests
     {
         var bytes = Encoding.UTF8.GetBytes("""{"type":"assistant.turn_start"}""");
         Assert.AreEqual("ready", EventTailReader.Activity(bytes, true, TestDirectory.Now.AddMinutes(-15), TestDirectory.Now));
+    }
+
+    [TestMethod]
+    public void Activity_UnansweredQuestionRemainsAttentionAfterInactivityUntilAnsweredOrOffline()
+    {
+        const string events = """
+            {"type":"assistant.turn_start"}
+            {"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}
+            """;
+        var stale = TestDirectory.Now.AddHours(-2);
+        var unanswered = Encoding.UTF8.GetBytes(events);
+        Assert.AreEqual("attention", EventTailReader.Activity(unanswered, true, stale, TestDirectory.Now));
+        Assert.AreEqual("offline", EventTailReader.Activity(unanswered, false, stale, TestDirectory.Now));
+        var answered = Encoding.UTF8.GetBytes(events + "\n" + """{"type":"tool.execution_complete","data":{"toolCallId":"q"}}""");
+        Assert.AreEqual("ready", EventTailReader.Activity(answered, true, stale, TestDirectory.Now));
     }
 
     [TestMethod]

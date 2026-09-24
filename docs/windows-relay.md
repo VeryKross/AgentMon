@@ -57,6 +57,9 @@ If a worktree session has no repository in its workspace metadata, the relay
 uses Git's worktree pointer to show the parent project's name rather than the
 worktree branch as the project label. The session title remains on the next
 line, and the branch remains in the host line.
+Standalone chats without a repository or branch show **Copilot Chat** above
+their subject when their working directory has Copilot's generated chat name,
+rather than displaying that internal directory name.
 
 ## Startup and tray behavior
 
@@ -99,8 +102,8 @@ below this limit.
 
 The relay reads `%USERPROFILE%\.copilot\session-state` every three seconds:
 
-- Top-level workspace ID, working directory, repository, branch, title, and
-  modification time from `workspace.yaml` (bounded to 256 KiB).
+- Top-level workspace ID, working directory, project-root marker, repository,
+  branch, title, and modification time from `workspace.yaml` (bounded to 256 KiB).
 - At most the last 128 KiB of `events.jsonl`. Only event types, tool names, and
   tool-call IDs are used to derive state. Partial JSON lines are ignored.
 - `inuse.<pid>.lock` entries, with an actual process-liveness check.
@@ -109,7 +112,9 @@ The relay reads `%USERPROFILE%\.copilot\session-state` every three seconds:
 excluded. Only attention, working, ready, and recent offline sessions are
 returned, ordered by that priority and then recency, capped at 50. Offline
 sessions older than 24 hours are excluded. As in the Mac adapter, a live
-session with no recent event activity for 15 minutes is treated as ready.
+session with no recent event activity for 15 minutes is treated as ready
+unless it is still waiting for an unanswered `ask_user` question. An unanswered
+question stays in attention until answered or the session process exits.
 
 HTTPS responses contain only the protocol's host/session IDs, host display
 name, platform, project basename, workspace title (maximum 120 Unicode scalars),

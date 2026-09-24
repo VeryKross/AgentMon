@@ -63,7 +63,8 @@ Response body:
 - `host.platform`: `windows` for the first relay implementation.
 - `sessions`: zero to 50 most relevant sessions.
 - `sessions[].id`: the local Copilot session ID.
-- `project`: short project name suitable for display.
+- `project`: short project name suitable for display; standalone chats with no
+  project metadata use `Copilot Chat` instead of their generated workspace name.
 - `task`: concise session title, maximum 120 Unicode scalar values.
 - `repository` and `branch`: nullable strings.
 - `activity`: one of `working`, `ready`, `attention`, or `offline`.
