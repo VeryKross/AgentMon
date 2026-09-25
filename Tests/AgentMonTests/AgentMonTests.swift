@@ -160,6 +160,42 @@ import Testing
   #expect(activity == .offline)
 }
 
+@Test func flashesOnlyWhenAnExistingWorkingSessionBecomesReady() {
+  var tracker = SessionCompletionTracker()
+
+  func session(_ id: String, _ activity: AgentActivity) -> AgentSession {
+    AgentSession(
+      id: id,
+      project: "AgentMon",
+      task: "Working",
+      repository: nil,
+      branch: nil,
+      activity: activity,
+      updatedAt: .now
+    )
+  }
+
+  tracker.update(with: [session("a", .ready), session("b", .working)])
+  #expect(tracker.generations.isEmpty)
+
+  tracker.update(with: [session("a", .working), session("b", .ready)])
+  #expect(tracker.generations == ["b": 1])
+
+  tracker.update(with: [session("a", .ready), session("b", .ready)])
+  #expect(tracker.generations == ["a": 1, "b": 1])
+
+  tracker.update(with: [session("a", .ready), session("b", .ready)])
+  #expect(tracker.generations == ["a": 1, "b": 1])
+
+  tracker.update(with: [session("a", .attention), session("b", .working)])
+  tracker.update(with: [session("a", .ready), session("b", .ready)])
+  #expect(tracker.generations == ["a": 1, "b": 2])
+
+  tracker.update(with: [])
+  tracker.update(with: [session("b", .ready)])
+  #expect(tracker.generations.isEmpty)
+}
+
 @Test func mapsWeatherCodes() {
   #expect(WeatherCode.description(for: 0) == "Sunny")
   #expect(WeatherCode.description(for: 1) == "Mostly sunny")

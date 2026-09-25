@@ -9,7 +9,6 @@ import SwiftUI
  */
 struct DashboardView: View {
   @EnvironmentObject private var dashboard: DashboardModel
-  @State private var pulse = false
 
   var body: some View {
     GeometryReader { geometry in
@@ -31,7 +30,7 @@ struct DashboardView: View {
                 .frame(width: 400, height: 206)
             }
 
-            AgentDeskWindow(pulse: pulse)
+            AgentDeskWindow()
               .frame(width: 826, height: 652)
           }
           .padding(.horizontal, 18)
@@ -52,12 +51,6 @@ struct DashboardView: View {
     }
     .ignoresSafeArea()
     .preferredColorScheme(.light)
-    .task {
-      while !Task.isCancelled {
-        try? await Task.sleep(for: .milliseconds(650))
-        pulse.toggle()
-      }
-    }
   }
 }
 
@@ -223,7 +216,6 @@ private struct MetricBlock: View {
 
 private struct AgentDeskWindow: View {
   @EnvironmentObject private var dashboard: DashboardModel
-  let pulse: Bool
 
   private var visibleSessions: [AgentSession] {
     Array(dashboard.sessions.prefix(4))
@@ -273,7 +265,7 @@ private struct AgentDeskWindow: View {
         } else {
           VStack(spacing: 0) {
             ForEach(visibleSessions) { session in
-              AgentRow(session: session, pulse: pulse)
+              AgentRow(session: session)
               if session.id != visibleSessions.last?.id {
                 DashedRule()
               }
@@ -324,12 +316,13 @@ private struct AgentTally: View {
 }
 
 private struct AgentRow: View {
+  @EnvironmentObject private var dashboard: DashboardModel
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   let session: AgentSession
-  let pulse: Bool
 
   var body: some View {
     HStack(spacing: 16) {
-      StatusGlyph(activity: session.activity, pulse: pulse)
+      StatusGlyph(activity: session.activity)
         .frame(width: 66)
 
       VStack(alignment: .leading, spacing: 5) {
@@ -371,7 +364,16 @@ private struct AgentRow: View {
     }
     .padding(.horizontal, 17)
     .frame(height: 104)
-    .background(session.activity == .attention ? RetroTheme.ink.opacity(0.08) : Color.clear)
+    .phaseAnimator(
+      [false, true, false, true, false],
+      trigger: reduceMotion ? nil : dashboard.completionFlashCounts[session.id]
+    ) { row, highlighted in
+      row.background(
+        RetroTheme.ink.opacity(highlighted ? 0.18 : (session.activity == .attention ? 0.08 : 0))
+      )
+    } animation: { _ in
+      .easeInOut(duration: 0.16)
+    }
   }
 
   private var hostLine: String {

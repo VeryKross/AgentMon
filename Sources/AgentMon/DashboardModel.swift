@@ -27,6 +27,7 @@ final class DashboardModel: ObservableObject {
   @Published private(set) var memoryHistory = [Double](repeating: 0, count: 28)
   @Published private(set) var isRefreshing = false
   @Published private(set) var relayState: RelayConnectionState = .disabled
+  @Published private(set) var completionFlashCounts: [String: Int] = [:]
 
   private let systemMonitor = SystemMonitor()
   private let sessionMonitor = CopilotSessionMonitor()
@@ -43,6 +44,7 @@ final class DashboardModel: ObservableObject {
   private var remoteSessions: [AgentSession] = []
   private var remoteHost: AgentHost?
   private var relayTask: Task<Void, Never>?
+  private var completionTracker = SessionCompletionTracker()
 
   var workingAgentCount: Int {
     sessions.filter { $0.activity == .working }.count
@@ -194,13 +196,18 @@ final class DashboardModel: ObservableObject {
   }
 
   private func mergeSessions() {
-    sessions = (localSessions + remoteSessions)
+    let merged = (localSessions + remoteSessions)
       .sorted {
         if $0.activity.sortOrder != $1.activity.sortOrder {
           return $0.activity.sortOrder < $1.activity.sortOrder
         }
         return $0.updatedAt > $1.updatedAt
       }
+    completionTracker.update(with: merged)
+    if completionFlashCounts != completionTracker.generations {
+      completionFlashCounts = completionTracker.generations
+    }
+    sessions = merged
   }
 
   private func append(_ value: Double, to history: inout [Double]) {
@@ -287,6 +294,23 @@ final class DashboardModel: ObservableObject {
     weatherError = nil
     cpuHistory = [22, 31, 28, 42, 38, 51, 47, 62, 45, 37, 41, 35, 39, 37]
     memoryHistory = [48, 50, 51, 52, 53, 54, 55, 56, 56, 57, 57, 58, 57, 58]
+  }
+}
+
+struct SessionCompletionTracker {
+  private(set) var generations: [String: Int] = [:]
+  private var previousActivities: [String: AgentActivity] = [:]
+
+  mutating func update(with sessions: [AgentSession]) {
+    var currentActivities: [String: AgentActivity] = [:]
+    for session in sessions {
+      currentActivities[session.id] = session.activity
+      if previousActivities[session.id] == .working && session.activity == .ready {
+        generations[session.id, default: 0] += 1
+      }
+    }
+    generations = generations.filter { currentActivities[$0.key] != nil }
+    previousActivities = currentActivities
   }
 }
 

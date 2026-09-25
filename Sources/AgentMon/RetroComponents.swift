@@ -185,7 +185,6 @@ struct MiniMacIcon: View {
 
 struct StatusGlyph: View {
   let activity: AgentActivity
-  let pulse: Bool
 
   var body: some View {
     ZStack {
@@ -206,7 +205,7 @@ struct StatusGlyph: View {
   private var glyph: some View {
     switch activity {
     case .working:
-      PixelWatch(handOffset: pulse ? 1 : -1)
+      PixelWatch()
     case .ready:
       Image(systemName: "checkmark")
         .font(.system(size: 21, weight: .black))
@@ -221,9 +220,19 @@ struct StatusGlyph: View {
 }
 
 private struct PixelWatch: View {
-  let handOffset: CGFloat
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
+    if reduceMotion {
+      watchFace(tick: 0)
+    } else {
+      TimelineView(.periodic(from: .now, by: 1)) { timeline in
+        watchFace(tick: Int(timeline.date.timeIntervalSinceReferenceDate))
+      }
+    }
+  }
+
+  private func watchFace(tick: Int) -> some View {
     Canvas { context, size in
       let center = CGPoint(x: size.width / 2, y: size.height / 2)
       let radius = min(size.width, size.height) * 0.28
@@ -243,11 +252,25 @@ private struct PixelWatch: View {
         with: .color(RetroTheme.ink)
       )
       var hands = Path()
+      let longAngle = CGFloat(tick % 12) * .pi / 6 - .pi / 2
+      let shortAngle = CGFloat((tick / 4 + 3) % 12) * .pi / 6 - .pi / 2
       hands.move(to: center)
-      hands.addLine(to: CGPoint(x: center.x + handOffset, y: center.y - radius + 4))
+      hands.addLine(
+        to: CGPoint(
+          x: center.x + cos(longAngle) * (radius - 3),
+          y: center.y + sin(longAngle) * (radius - 3)
+        ))
       hands.move(to: center)
-      hands.addLine(to: CGPoint(x: center.x + radius - 4, y: center.y + 2))
+      hands.addLine(
+        to: CGPoint(
+          x: center.x + cos(shortAngle) * (radius - 7),
+          y: center.y + sin(shortAngle) * (radius - 7)
+        ))
       context.stroke(hands, with: .color(RetroTheme.ink), lineWidth: 2)
+      context.fill(
+        Path(ellipseIn: CGRect(x: center.x - 2, y: center.y - 2, width: 4, height: 4)),
+        with: .color(RetroTheme.ink)
+      )
     }
   }
 }

@@ -170,6 +170,7 @@ Weather uses a complete one-bit scene vocabulary rather than one generic icon. C
 - **Do** draw distinctive icons with crisp paths and stipple marks.
 - **Do** preserve a unique silhouette and precipitation grammar for every weather family.
 - **Do** keep motion low-frequency, brief, and tied to live state.
+- **Do** tick watch hands only for working sessions and briefly flash a row only on a working-to-ready transition; honor Reduce Motion.
 - **Do** maintain the approved 1280×720 hierarchy.
 
 ### Don't:

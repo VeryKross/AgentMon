@@ -23,6 +23,7 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 
 - **Live Mac health:** processor load, memory use, startup-disk use, and uptime
 - **Copilot session desk:** active and recent GitHub Copilot project sessions, repositories, branches, and activity
+- **Quiet status motion:** working-session watch hands tick while active; a completed turn briefly flashes its session row when it becomes ready (both honor Reduce Motion)
 - **Cross-computer view:** merges sessions from a securely paired Windows relay into one prioritized Agent Desk
 - **Attention state:** visually inverts a session when Copilot is waiting for an answer
 - **Local weather:** keyless temperature data from [Open-Meteo](https://open-meteo.com/) with fresh U.S. sky observations from the [National Weather Service](https://www.weather.gov/), defaulting to Marietta, Georgia 30066
