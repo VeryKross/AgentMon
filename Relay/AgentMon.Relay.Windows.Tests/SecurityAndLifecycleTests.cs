@@ -45,6 +45,35 @@ public sealed class SecurityAndLifecycleTests
     }
 
     [TestMethod]
+    public async Task StartHidden_Restart_PreservesPreferenceAndPairing()
+    {
+        using var temp = new TestDirectory();
+        var store = new ProtectedSettingsStore(temp.Root);
+        var original = store.LoadOrCreate();
+        Assert.IsFalse(original.StartHidden);
+
+        await using (var controller = new RelayController(store, temp.Log, temp.FilePath("sessions"),
+                         new NoPrivateNetworks()))
+        {
+            await controller.SetStartHiddenAsync(true);
+            Assert.IsTrue(controller.StartHidden);
+        }
+
+        var hidden = new ProtectedSettingsStore(temp.Root).LoadOrCreate();
+        Assert.IsTrue(hidden.StartHidden);
+        Assert.AreEqual(original.HostId, hidden.HostId);
+        Assert.AreEqual(original.Token, hidden.Token);
+        CollectionAssert.AreEqual(original.Certificate, hidden.Certificate);
+
+        await using (var controller = new RelayController(store, temp.Log, temp.FilePath("sessions"),
+                         new NoPrivateNetworks()))
+        {
+            await controller.SetStartHiddenAsync(false);
+        }
+        Assert.IsFalse(store.LoadOrCreate().StartHidden);
+    }
+
+    [TestMethod]
     public void Save_ExplicitRotation_PreservesHostAndChangesOnlySelectedCredential()
     {
         using var temp = new TestDirectory();

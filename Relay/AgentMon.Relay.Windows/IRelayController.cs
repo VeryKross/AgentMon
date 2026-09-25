@@ -12,9 +12,11 @@ internal sealed record RelayView(
 
 internal interface IRelayController : IAsyncDisposable
 {
+    bool StartHidden { get; }
     RelayView GetView();
     Task StartAsync();
     Task StopAsync();
+    Task SetStartHiddenAsync(bool startHidden);
     Task SetDisplayNameAsync(string name);
     Task RegenerateTokenAsync();
     Task RegenerateCertificateAsync();

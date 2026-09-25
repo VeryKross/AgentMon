@@ -38,6 +38,8 @@ internal sealed class RelayController : IRelayController
             0, null, null, "Not advertising");
     }
 
+    public bool StartHidden => Volatile.Read(ref settings).StartHidden;
+
     public RelayView GetView()
     {
         var current = Volatile.Read(ref view);
@@ -115,6 +117,9 @@ internal sealed class RelayController : IRelayController
             throw new ArgumentException("Use 1 to 120 characters without control characters.", nameof(name));
         return UpdateSettingsAsync(current => current with { DisplayName = name });
     }
+
+    public Task SetStartHiddenAsync(bool startHidden)
+        => UpdateSettingsAsync(current => current with { StartHidden = startHidden });
 
     public Task RegenerateTokenAsync()
         => UpdateSettingsAsync(current => current with { Token = ProtectedSettingsStore.NewToken() });

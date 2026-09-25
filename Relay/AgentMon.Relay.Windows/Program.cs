@@ -42,10 +42,10 @@ internal static class Program
 
         try
         {
-            var startInBackground = args.Any(argument =>
-                string.Equals(argument, BackgroundArgument, StringComparison.OrdinalIgnoreCase));
+            var controller = RelayApplication.CreateController();
+            var startInBackground = ShouldStartInBackground(args, controller.StartHidden);
             using var context = new RelayTrayContext(
-                RelayApplication.CreateController(),
+                controller,
                 startInBackground);
             Application.Run(context);
             return 0;
@@ -61,6 +61,10 @@ internal static class Program
             return 1;
         }
     }
+
+    internal static bool ShouldStartInBackground(string[] args, bool startHidden)
+        => startHidden || args.Any(argument =>
+            string.Equals(argument, BackgroundArgument, StringComparison.OrdinalIgnoreCase));
 
     private static int ConfigureFirewall()
     {

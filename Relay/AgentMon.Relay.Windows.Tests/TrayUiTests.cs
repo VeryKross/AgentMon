@@ -16,6 +16,7 @@ public sealed class TrayUiTests
             using (var normal = new RelayTrayContext(normalController, startInBackground: false, queryWindowsIntegration: false))
             {
                 Assert.AreEqual(1, normalController.StartCount);
+                Assert.IsTrue(normal.ManagementForm.Visible);
                 await normal.RequestQuitAsync();
             }
 
@@ -23,8 +24,30 @@ public sealed class TrayUiTests
             using (var background = new RelayTrayContext(backgroundController, startInBackground: true, queryWindowsIntegration: false))
             {
                 Assert.AreEqual(1, backgroundController.StartCount);
+                Assert.IsFalse(background.ManagementForm.Visible);
                 await background.RequestQuitAsync();
             }
+        });
+
+    [TestMethod]
+    public Task HiddenLaunch_SettingCanBeChangedFromManagementWindow()
+        => RunStaAsync(async () =>
+        {
+            var controller = new FakeRelayController();
+            using var context = new RelayTrayContext(controller, startInBackground: false, queryWindowsIntegration: false);
+            Assert.IsFalse(context.ManagementForm.StartHiddenCheckBox.Checked);
+
+            context.ManagementForm.StartHiddenCheckBox.Checked = true;
+            Assert.IsTrue(controller.StartHidden);
+            Assert.IsTrue(context.ManagementForm.Visible);
+            await context.RequestQuitAsync();
+
+            using var hidden = new RelayTrayContext(controller, startInBackground: controller.StartHidden,
+                queryWindowsIntegration: false);
+            Assert.IsFalse(hidden.ManagementForm.Visible);
+            hidden.ManagementForm.StartHiddenCheckBox.Checked = false;
+            Assert.IsFalse(controller.StartHidden);
+            await hidden.RequestQuitAsync();
         });
 
     [TestMethod]
@@ -268,6 +291,7 @@ public sealed class TrayUiTests
     private sealed class FakeRelayController : IRelayController
     {
         internal RelayView View { get; set; } = CreateView("Stopped");
+        public bool StartHidden { get; private set; }
         internal int StartCount { get; private set; }
         internal int StopCount { get; private set; }
         internal int DisposeCount { get; private set; }
@@ -283,6 +307,12 @@ public sealed class TrayUiTests
         public Task StopAsync()
         {
             StopCount++;
+            return Task.CompletedTask;
+        }
+
+        public Task SetStartHiddenAsync(bool startHidden)
+        {
+            StartHidden = startHidden;
             return Task.CompletedTask;
         }
 

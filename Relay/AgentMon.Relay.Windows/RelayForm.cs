@@ -37,6 +37,7 @@ internal sealed class RelayForm : Form
         FirewallElevation,
         OpenLogs,
         RelayStateChange,
+        StartHiddenSetting,
         StartupSetting,
         StartupStatus,
         TokenReveal,
@@ -67,6 +68,7 @@ internal sealed class RelayForm : Form
     private readonly Button rotateCertificateButton = new ContentSizedButton();
     private readonly Button configureFirewallButton = new ContentSizedButton();
     private readonly CheckBox startupCheckBox = new();
+    private readonly CheckBox startHiddenCheckBox = new();
     private readonly System.Windows.Forms.Timer refreshTimer = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer tokenTimer = new();
     private bool busy;
@@ -95,6 +97,7 @@ internal sealed class RelayForm : Form
         Padding = new Padding(16);
 
         BuildLayout();
+        startHiddenCheckBox.Checked = controller.StartHidden;
         WireEvents();
         RefreshView();
         if (queryWindowsIntegration)
@@ -118,6 +121,8 @@ internal sealed class RelayForm : Form
     internal Button SaveNameButton => saveNameButton;
 
     internal Button StartStopButton => startStopButton;
+
+    internal CheckBox StartHiddenCheckBox => startHiddenCheckBox;
 
     internal string StateText => stateValue.Text;
 
@@ -318,6 +323,11 @@ internal sealed class RelayForm : Form
         startupCheckBox.AutoSize = true;
         AddFullWidthRow(windowsGrid, startupCheckBox);
 
+        startHiddenCheckBox.Text = "Start with management window hidden";
+        startHiddenCheckBox.AccessibleName = "Keep management window hidden on launch";
+        startHiddenCheckBox.AutoSize = true;
+        AddFullWidthRow(windowsGrid, startHiddenCheckBox);
+
         var footerPanel = new FlowLayoutPanel
         {
             AutoSize = true,
@@ -413,6 +423,16 @@ internal sealed class RelayForm : Form
         rotateCertificateButton.Click += async (_, _) => await RotateCertificateAsync();
         configureFirewallButton.Click += async (_, _) => await ConfigureFirewallAsync();
         startupCheckBox.CheckedChanged += (_, _) => ChangeStartupSetting();
+        startHiddenCheckBox.CheckedChanged += async (_, _) =>
+        {
+            if (startHiddenCheckBox.Tag is true)
+                return;
+            await RunControllerActionAsync(UiOperation.StartHiddenSetting,
+                () => controller.SetStartHiddenAsync(startHiddenCheckBox.Checked));
+            startHiddenCheckBox.Tag = true;
+            startHiddenCheckBox.Checked = controller.StartHidden;
+            startHiddenCheckBox.Tag = false;
+        };
         refreshTimer.Tick += (_, _) => RefreshView();
         tokenTimer.Tick += (_, _) => HideToken();
         refreshTimer.Start();
@@ -614,6 +634,7 @@ internal sealed class RelayForm : Form
         rotateCertificateButton.Enabled = !value;
         configureFirewallButton.Enabled = !value && firewallCanConfigure;
         startupCheckBox.Enabled = !value && startupAvailable;
+        startHiddenCheckBox.Enabled = !value;
     }
 
     private void CopyToClipboard(string value, string description)
@@ -675,6 +696,9 @@ internal sealed class RelayForm : Form
                 break;
             case UiOperation.StartupSetting:
                 RelayApplication.LogFailure("startup setting", error);
+                break;
+            case UiOperation.StartHiddenSetting:
+                RelayApplication.LogFailure("window startup setting", error);
                 break;
             case UiOperation.StartupStatus:
                 RelayApplication.LogFailure("startup status", error);

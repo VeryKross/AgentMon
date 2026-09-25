@@ -5,7 +5,10 @@ using System.Text.Json;
 
 namespace AgentMon.Relay.Windows;
 
-internal sealed record RelaySettings(string HostId, string DisplayName, string Token, byte[] Certificate);
+internal sealed record RelaySettings(string HostId, string DisplayName, string Token, byte[] Certificate)
+{
+    public bool StartHidden { get; init; }
+}
 
 internal sealed class ProtectedSettingsStore(string directory)
 {

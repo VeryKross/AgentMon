@@ -35,6 +35,15 @@ public sealed class InstallationTests
     }
 
     [TestMethod]
+    public void LaunchMode_FirstLaunchShowsWindowAndSignInOrPreferenceHidesIt()
+    {
+        Assert.IsFalse(Program.ShouldStartInBackground([], startHidden: false));
+        Assert.IsTrue(Program.ShouldStartInBackground([], startHidden: true));
+        Assert.IsTrue(Program.ShouldStartInBackground(["--background"], startHidden: false));
+        Assert.IsTrue(Program.ShouldStartInBackground(["--BACKGROUND"], startHidden: false));
+    }
+
+    [TestMethod]
     public void VersionCommand_ReturnsWithoutCreatingState()
     {
         Assert.IsTrue(InstallationMaintenance.TryRun(["--version"], out var code));
