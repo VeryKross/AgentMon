@@ -210,7 +210,7 @@ Pop-Location
 .\scripts\install-inno-setup.ps1
 .\scripts\publish-relay.ps1 -Installer
 .\scripts\publish-relay.ps1 -Runtime win-arm64 -Installer
-.\scripts\test-relay-artifacts.ps1 -Version 0.2.1
+.\scripts\test-relay-artifacts.ps1 -Version 0.2.2
 ```
 
 The release command uses pinned packages, locked restore, the pinned SDK,
@@ -244,7 +244,7 @@ user's profile or change execution policy to run:
 
 ```powershell
 .\scripts\test-relay-installer.ps1 -OldSetup <older-fixture-Setup.exe> `
-    -NewSetup <current-Setup.exe> -ExpectedVersion 0.2.1
+    -NewSetup <current-Setup.exe> -ExpectedVersion 0.2.2
 ```
 
 CI builds the older fixture from the current source with `-Version 0.1.9`;
