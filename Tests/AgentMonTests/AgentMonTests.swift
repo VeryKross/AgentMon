@@ -79,6 +79,72 @@ import Testing
   #expect(activity == .ready)
 }
 
+@Test func keepsWorkingAcrossCompletedAssistantSubturns() {
+  let events = """
+    {"type":"user.message"}
+    {"type":"session.fusion_commit_started"}
+    {"type":"assistant.turn_start"}
+    {"type":"tool.execution_start","data":{"toolCallId":"tool-1","toolName":"bash"}}
+    {"type":"tool.execution_complete","data":{"toolCallId":"tool-1"}}
+    {"type":"assistant.turn_end"}
+    """.data(using: .utf8)!
+
+  #expect(AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .working)
+}
+
+@Test func modelLifecycleRemainsWorkingUntilFusionCompletes() {
+  let working = """
+    {"type":"user.message"}
+    {"type":"model.turn_started"}
+    {"type":"model.model_call_started"}
+    {"type":"model.turn_ended"}
+    """
+
+  #expect(AgentEventParser.activity(
+    from: Data(working.utf8),
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .working)
+  #expect(AgentEventParser.activity(
+    from: Data((working + "\n" + #"{"type":"session.fusion_completed"}"#).utf8),
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .ready)
+}
+
+@Test func expandsEventTailPastHookTrafficToFindLifecycle() throws {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent("agentmon-events-\(UUID().uuidString).jsonl")
+  defer { try? FileManager.default.removeItem(at: url) }
+
+  var events = Data("{\"type\":\"user.message\"}\n".utf8)
+  let hook = Data(
+    "{\"type\":\"hook.end\",\"data\":{\"padding\":\"session.fusion_completed ".utf8
+  )
+    + Data(repeating: 0x78, count: 2_048)
+    + Data("\"}}\n".utf8)
+  for _ in 0..<100 {
+    events.append(hook)
+  }
+  try events.write(to: url)
+
+  let tail = CopilotSessionMonitor.tail(of: url)
+  #expect(tail.count > 128 * 1_024)
+  #expect(AgentEventParser.activity(
+    from: tail,
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .working)
+}
+
 @Test func detectsWorkingAgentBeforeAssistantTurnStarts() {
   let events = """
     {"type":"assistant.turn_start"}

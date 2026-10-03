@@ -42,7 +42,7 @@ struct CopilotSessionMonitor {
     let updatedAt = max(eventDate, workspaceDate)
     let hasLiveProcess = liveSessionPID(in: directory) != nil
     let activity = AgentEventParser.activity(
-      from: tail(of: eventsURL),
+      from: Self.tail(of: eventsURL),
       hasLiveProcess: hasLiveProcess,
       updatedAt: updatedAt,
       now: now
@@ -109,14 +109,50 @@ struct CopilotSessionMonitor {
     return nil
   }
 
-  private func tail(of url: URL, maximumBytes: UInt64 = 128 * 1_024) -> Data {
+  static func tail(
+    of url: URL,
+    initialBytes: UInt64 = 128 * 1_024,
+    maximumBytes: UInt64 = 4 * 1_024 * 1_024
+  ) -> Data {
     guard let handle = try? FileHandle(forReadingFrom: url) else { return Data() }
     defer { try? handle.close() }
 
     let size = (try? handle.seekToEnd()) ?? 0
-    let offset = size > maximumBytes ? size - maximumBytes : 0
-    try? handle.seek(toOffset: offset)
-    return (try? handle.readToEnd()) ?? Data()
+    var byteCount = min(initialBytes, maximumBytes)
+
+    while true {
+      let offset = size > byteCount ? size - byteCount : 0
+      try? handle.seek(toOffset: offset)
+      let data = (try? handle.readToEnd()) ?? Data()
+
+      if offset == 0 || containsActivityBoundary(data) || byteCount >= maximumBytes {
+        return data
+      }
+      byteCount = min(byteCount * 2, maximumBytes)
+    }
+  }
+
+  private static func containsActivityBoundary(_ data: Data) -> Bool {
+    for line in data.split(separator: 0x0A) {
+      guard
+        let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+        let type = object["type"] as? String
+      else { continue }
+
+      if type.hasPrefix("session.fusion_")
+        || type.hasPrefix("model.")
+        || type == "user.message"
+      {
+        return true
+      }
+      if type == "tool.execution_start",
+        let payload = object["data"] as? [String: Any],
+        payload["toolName"] as? String == "ask_user"
+      {
+        return true
+      }
+    }
+    return false
   }
 
   private func conciseTaskName(_ rawName: String, project: String) -> String {
@@ -176,11 +212,24 @@ enum AgentEventParser {
 
     let lines = data.split(separator: 0x0A).reversed()
     var completedToolCalls = Set<String>()
+    var assistantTurnEnded = false
 
     for line in lines {
       guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
         let type = object["type"] as? String
       else { continue }
+
+      if type == "session.fusion_completed" {
+        return hasLiveProcess ? .ready : .offline
+      }
+
+      if type == "session.fusion_commit_started"
+        || type == "session.fusion_handoff"
+        || type.hasPrefix("model.")
+      {
+        guard hasLiveProcess else { return .offline }
+        return recent ? .working : .ready
+      }
 
       if type == "tool.execution_complete",
         let payload = object["data"] as? [String: Any],
@@ -194,19 +243,25 @@ enum AgentEventParser {
         let payload = object["data"] as? [String: Any],
         payload["toolName"] as? String == "ask_user",
         let toolCallID = payload["toolCallId"] as? String,
-        !completedToolCalls.contains(toolCallID)
+        !completedToolCalls.contains(toolCallID),
+        !assistantTurnEnded
       {
         return .attention
       }
 
       if type == "assistant.turn_start" {
+        guard !assistantTurnEnded else { continue }
         guard hasLiveProcess else { return .offline }
         return recent ? .working : .ready
       }
       if type == "assistant.turn_end" {
-        return hasLiveProcess ? .ready : .offline
+        assistantTurnEnded = true
+        continue
       }
       if type == "user.message" {
+        if assistantTurnEnded {
+          return hasLiveProcess ? .ready : .offline
+        }
         guard hasLiveProcess else { return .offline }
         return recent ? .working : .ready
       }

@@ -147,6 +147,34 @@ public sealed class ParsingTests
     }
 
     [TestMethod]
+    public void Activity_AssistantSubturnEnd_RemainsWorkingUntilFusionCompletes()
+    {
+        const string working = """
+            {"type":"user.message"}
+            {"type":"session.fusion_commit_started"}
+            {"type":"assistant.turn_start"}
+            {"type":"tool.execution_start","data":{"toolName":"run","toolCallId":"q"}}
+            {"type":"tool.execution_complete","data":{"toolCallId":"q"}}
+            {"type":"assistant.turn_end"}
+            """;
+        Assert.AreEqual("working", Activity(working));
+        Assert.AreEqual("ready", Activity(working + "\n" + """{"type":"session.fusion_completed"}"""));
+    }
+
+    [TestMethod]
+    public void Activity_ModelLifecycle_RemainsWorkingUntilFusionCompletes()
+    {
+        const string working = """
+            {"type":"user.message"}
+            {"type":"model.turn_started"}
+            {"type":"model.model_call_started"}
+            {"type":"model.turn_ended"}
+            """;
+        Assert.AreEqual("working", Activity(working));
+        Assert.AreEqual("ready", Activity(working + "\n" + """{"type":"session.fusion_completed"}"""));
+    }
+
+    [TestMethod]
     public void Activity_UnansweredQuestionRemainsAttentionAfterInactivityUntilAnsweredOrOffline()
     {
         const string events = """

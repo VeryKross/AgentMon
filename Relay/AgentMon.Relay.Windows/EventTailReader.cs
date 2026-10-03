@@ -28,6 +28,7 @@ internal static class EventTailReader
         var recent = now - updatedAt < TimeSpan.FromMinutes(15);
 
         var completed = new HashSet<string>(StringComparer.Ordinal);
+        var assistantTurnEnded = false;
         var end = tail.Length;
         while (end > 0)
         {
@@ -41,6 +42,11 @@ internal static class EventTailReader
                 using var document = JsonDocument.Parse(line, new JsonDocumentOptions { MaxDepth = 64 });
                 var root = document.RootElement;
                 var type = StringProperty(root, "type");
+                if (type == "session.fusion_completed")
+                    return live ? "ready" : "offline";
+                if (type is "session.fusion_commit_started" or "session.fusion_handoff" ||
+                    type?.StartsWith("model.", StringComparison.Ordinal) == true)
+                    return live ? recent ? "working" : "ready" : "offline";
                 if (type == "tool.execution_complete" && root.TryGetProperty("data", out var finished))
                 {
                     if (StringProperty(finished, "toolCallId") is { } completedId)
@@ -48,16 +54,21 @@ internal static class EventTailReader
                 }
                 else if (type == "tool.execution_start" && root.TryGetProperty("data", out var started) &&
                          StringProperty(started, "toolName") == "ask_user" &&
-                         StringProperty(started, "toolCallId") is { } questionId && !completed.Contains(questionId))
+                         StringProperty(started, "toolCallId") is { } questionId && !completed.Contains(questionId) &&
+                         !assistantTurnEnded)
                 {
                     return "attention";
                 }
                 else if (type == "assistant.turn_start")
-                    return live ? recent ? "working" : "ready" : "offline";
+                {
+                    if (!assistantTurnEnded)
+                        return live ? recent ? "working" : "ready" : "offline";
+                }
                 else if (type == "assistant.turn_end")
-                    return live ? "ready" : "offline";
+                    assistantTurnEnded = true;
                 else if (type == "user.message")
-                    return live ? recent ? "working" : "ready" : "offline";
+                    return assistantTurnEnded ? live ? "ready" : "offline" :
+                        live ? recent ? "working" : "ready" : "offline";
             }
             catch (JsonException)
             {
