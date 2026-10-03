@@ -81,6 +81,11 @@ Unknown JSON fields must be ignored. Missing required fields must reject the sna
 
 Match AgentMon's local adapter behavior in `CopilotSessionMonitor.swift`: inspect only workspace metadata, process lock/PID state, and event **types** needed to derive activity. Do not transmit event content.
 
+Exclude sessions whose latest workspace or event update is more than 90 days
+old, regardless of activity or process liveness. Sessions exactly 90 days old
+remain eligible. This cutoff applies before prioritization and the 50-session
+limit; offline sessions remain subject to the shorter 24-hour window.
+
 ## HTTP behavior
 
 - `200`: valid snapshot.

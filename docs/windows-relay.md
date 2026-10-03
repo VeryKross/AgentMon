@@ -134,10 +134,13 @@ The relay reads `%USERPROFILE%\.copilot\session-state` every three seconds:
 `pending-session*`, hidden directories, and directory reparse points are
 excluded. Only attention, working, ready, and recent offline sessions are
 returned, ordered by that priority and then recency, capped at 50. Offline
-sessions older than 24 hours are excluded. As in the Mac adapter, a live
+sessions older than 24 hours are excluded. All sessions whose latest workspace
+or event update is more than 90 days old are excluded, even if a process appears
+alive or an unanswered question remains. A new update makes a session eligible
+again. As in the Mac adapter, a live
 session with no recent event activity for 15 minutes is treated as ready
 unless it is still waiting for an unanswered `ask_user` question. An unanswered
-question stays in attention until answered or the session process exits.
+question stays in attention until answered, subject to the 90-day cutoff.
 
 HTTPS responses contain only the protocol's host/session IDs, host display
 name, platform, project basename, workspace title (maximum 120 Unicode scalars),
@@ -203,7 +206,7 @@ Pop-Location
 .\scripts\install-inno-setup.ps1
 .\scripts\publish-relay.ps1 -Installer
 .\scripts\publish-relay.ps1 -Runtime win-arm64 -Installer
-.\scripts\test-relay-artifacts.ps1 -Version 0.2.1
+.\scripts\test-relay-artifacts.ps1 -Version 0.2.4
 ```
 
 The release command uses pinned packages, locked restore, the pinned SDK,
@@ -237,7 +240,7 @@ user's profile or change execution policy to run:
 
 ```powershell
 .\scripts\test-relay-installer.ps1 -OldSetup <older-fixture-Setup.exe> `
-    -NewSetup <current-Setup.exe> -ExpectedVersion 0.2.1
+    -NewSetup <current-Setup.exe> -ExpectedVersion 0.2.4
 ```
 
 CI builds the older fixture from the current source with `-Version 0.1.9`;

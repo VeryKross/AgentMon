@@ -31,6 +31,71 @@ public sealed class IndexerTests
     }
 
     [TestMethod]
+    [DataRow(89, 0, true, true)]
+    [DataRow(90, 0, true, true)]
+    [DataRow(90, 1, true, false)]
+    [DataRow(201, 0, true, false)]
+    [DataRow(90, 0, false, true)]
+    [DataRow(90, 1, false, false)]
+    [DataRow(201, 0, false, false)]
+    public void Scan_SessionAgeCutoff_OverridesAttentionAndProcessLiveness(
+        int days, int seconds, bool live, bool included)
+    {
+        using var temp = new TestDirectory();
+        var updatedAt = TestDirectory.Now.AddDays(-days).AddSeconds(-seconds);
+        temp.Session("attention",
+            """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
+            live, updatedAt);
+        temp.Session("ready", live: live, updatedAt: updatedAt);
+        var indexer = new SessionIndexer(temp.Root, temp.Log);
+
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        var sessions = indexer.Snapshot!.Sessions;
+        Assert.AreEqual(included, sessions.Any(session => session.Id == "attention"));
+        Assert.AreEqual(included && live, sessions.Any(session => session.Id == "ready"));
+    }
+
+    [TestMethod]
+    public void Scan_AgeCutoff_UsesLatestWorkspaceOrEventTimestamp()
+    {
+        using var temp = new TestDirectory();
+        var old = TestDirectory.Now.AddDays(-201);
+        var recentEvents = temp.Session("recent-events",
+            """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
+            updatedAt: old);
+        File.SetLastWriteTimeUtc(Path.Combine(recentEvents, "events.jsonl"), TestDirectory.Now.UtcDateTime);
+        var recentWorkspace = temp.Session("recent-workspace", live: true);
+        File.SetLastWriteTimeUtc(Path.Combine(recentWorkspace, "events.jsonl"), old.UtcDateTime);
+        var indexer = new SessionIndexer(temp.Root, temp.Log);
+
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        CollectionAssert.AreEquivalent(new[] { "recent-events", "recent-workspace" },
+            indexer.Snapshot!.Sessions.Select(session => session.Id).ToArray());
+        Assert.IsTrue(indexer.Snapshot.Sessions.All(session => session.UpdatedAt == TestDirectory.Now));
+    }
+
+    [TestMethod]
+    public void Scan_SessionCrossesAgeCutoff_RemovesItUntilNewActivity()
+    {
+        using var temp = new TestDirectory();
+        var directory = temp.Session("attention",
+            """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
+            updatedAt: TestDirectory.Now.AddDays(-90));
+        var indexer = new SessionIndexer(temp.Root, temp.Log);
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        Assert.AreEqual(1, indexer.Snapshot!.Sessions.Count);
+
+        var later = TestDirectory.Now.AddSeconds(1);
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, later));
+        Assert.AreEqual(0, indexer.Snapshot!.Sessions.Count);
+
+        File.SetLastWriteTimeUtc(Path.Combine(directory, "events.jsonl"), later.UtcDateTime);
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, later));
+        Assert.AreEqual(1, indexer.Snapshot!.Sessions.Count);
+        Assert.AreEqual(later, indexer.Snapshot.Sessions[0].UpdatedAt);
+    }
+
+    [TestMethod]
     public void Scan_LockedWorkspace_KeepsWholeSnapshotAndOriginalGeneratedAtThenRecovers()
     {
         using var temp = new TestDirectory();
