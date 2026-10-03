@@ -62,7 +62,9 @@ internal sealed class SessionIndexer(string root, SafeLog log, Func<int, bool>? 
                 if (now - updatedAt > TimeSpan.FromDays(90))
                     continue;
                 var live = HasLiveProcess(directory, isAlive ?? ProcessIsAlive);
-                var activity = EventTailReader.Activity(tail, live, updatedAt, now);
+                var hasAvailableWorkspace = fields.TryGetValue("cwd", out var cwd) &&
+                    Path.IsPathFullyQualified(cwd) && Directory.Exists(cwd);
+                var activity = EventTailReader.Activity(tail, live, updatedAt, now, hasAvailableWorkspace);
                 if (activity != "offline" || now - updatedAt < TimeSpan.FromDays(1))
                     sessions.Add(WorkspaceReader.Normalize(fields, updatedAt, activity));
             }

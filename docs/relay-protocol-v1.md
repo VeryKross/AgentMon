@@ -75,7 +75,8 @@ Unknown JSON fields must be ignored. Missing required fields must reject the sna
 ## Activity semantics
 
 - `working`: an assistant turn is active.
-- `attention`: the session is blocked on user input.
+- `attention`: an unanswered question exists and the session process is alive
+  or its recorded working directory still exists, allowing the session to resume.
 - `ready`: the session process is alive but no turn or question is active.
 - `offline`: the indexed session is recent but its process is no longer alive.
 
@@ -85,6 +86,12 @@ Exclude sessions whose latest workspace or event update is more than 90 days
 old, regardless of activity or process liveness. Sessions exactly 90 days old
 remain eligible. This cutoff applies before prioritization and the 50-session
 limit; offline sessions remain subject to the shorter 24-hour window.
+
+For unanswered questions, check both process liveness and workspace availability.
+An existing absolute working directory keeps a dormant session in `attention`,
+because Desktop can resume it. If neither a live process nor an existing
+workspace remains, the session is `offline`, even if its question was never
+answered, and must be excluded once its latest update is at least 24 hours old.
 
 ## HTTP behavior
 

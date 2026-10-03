@@ -14,12 +14,14 @@ internal sealed class TestDirectory : IDisposable
     internal static DateTimeOffset Now => new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
     internal static RelayHost Host => new("c87c6241-8ef1-492a-8cd6-f78ae969323c", "Test PC");
 
-    internal string Session(string id, string events = "", bool live = false, DateTimeOffset? updatedAt = null)
+    internal string Session(string id, string events = "", bool live = false, DateTimeOffset? updatedAt = null,
+        string? cwd = null)
     {
         var directory = FilePath(id);
         Directory.CreateDirectory(directory);
+        var workspace = (cwd ?? @"C:\Projects\AgentMon").Replace("'", "''", StringComparison.Ordinal);
         File.WriteAllText(Path.Combine(directory, "workspace.yaml"),
-            $"id: {id}\ncwd: 'C:\\Projects\\AgentMon'\nrepository: VeryKross/AgentMon\nbranch: main\nname: Test session\nupdated_at: {(updatedAt ?? Now):O}\n");
+            $"id: {id}\ncwd: '{workspace}'\nrepository: VeryKross/AgentMon\nbranch: main\nname: Test session\nupdated_at: {(updatedAt ?? Now):O}\n");
         File.WriteAllText(Path.Combine(directory, "events.jsonl"), events);
         File.SetLastWriteTimeUtc(Path.Combine(directory, "events.jsonl"), (updatedAt ?? Now).UtcDateTime);
         if (live)

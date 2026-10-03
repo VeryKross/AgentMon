@@ -23,7 +23,8 @@ internal static class EventTailReader
         return buffer;
     }
 
-    internal static string Activity(ReadOnlyMemory<byte> tail, bool live, DateTimeOffset updatedAt, DateTimeOffset now)
+    internal static string Activity(ReadOnlyMemory<byte> tail, bool live, DateTimeOffset updatedAt, DateTimeOffset now,
+        bool hasAvailableWorkspace = false)
     {
         var recent = now - updatedAt < TimeSpan.FromMinutes(15);
 
@@ -57,7 +58,7 @@ internal static class EventTailReader
                          StringProperty(started, "toolCallId") is { } questionId && !completed.Contains(questionId) &&
                          !assistantTurnEnded)
                 {
-                    return "attention";
+                    return live || hasAvailableWorkspace ? "attention" : "offline";
                 }
                 else if (type == "assistant.turn_start")
                 {

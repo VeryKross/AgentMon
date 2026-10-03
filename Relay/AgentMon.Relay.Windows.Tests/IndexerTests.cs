@@ -16,7 +16,7 @@ public sealed class IndexerTests
         temp.Session("working", """{"type":"assistant.turn_start"}""", live: true, TestDirectory.Now.AddMinutes(-10));
         temp.Session("attention", """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""", live: true);
         temp.Session("dormant-attention", """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
-            updatedAt: TestDirectory.Now.AddDays(-3));
+            live: true, updatedAt: TestDirectory.Now.AddDays(-3));
         temp.Session("ready", live: true);
         temp.Session("old", updatedAt: TestDirectory.Now.AddDays(-2));
         temp.Session("pending-session-123", live: true);
@@ -35,7 +35,7 @@ public sealed class IndexerTests
     [DataRow(90, 0, true, true)]
     [DataRow(90, 1, true, false)]
     [DataRow(201, 0, true, false)]
-    [DataRow(90, 0, false, true)]
+    [DataRow(90, 0, false, false)]
     [DataRow(90, 1, false, false)]
     [DataRow(201, 0, false, false)]
     public void Scan_SessionAgeCutoff_OverridesAttentionAndProcessLiveness(
@@ -80,7 +80,7 @@ public sealed class IndexerTests
         using var temp = new TestDirectory();
         var directory = temp.Session("attention",
             """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
-            updatedAt: TestDirectory.Now.AddDays(-90));
+            live: true, updatedAt: TestDirectory.Now.AddDays(-90));
         var indexer = new SessionIndexer(temp.Root, temp.Log);
         Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
         Assert.AreEqual(1, indexer.Snapshot!.Sessions.Count);
@@ -93,6 +93,96 @@ public sealed class IndexerTests
         Assert.IsTrue(indexer.Scan(TestDirectory.Host, later));
         Assert.AreEqual(1, indexer.Snapshot!.Sessions.Count);
         Assert.AreEqual(later, indexer.Snapshot.Sessions[0].UpdatedAt);
+    }
+
+    [TestMethod]
+    [DataRow(0, 0, true)]
+    [DataRow(23, 59, true)]
+    [DataRow(24, 0, false)]
+    [DataRow(24 * 19, 0, false)]
+    public void Scan_UnansweredQuestionWithoutProcessOrWorkspace_UsesOfflineVisibilityWindow(
+        int hours, int minutes, bool included)
+    {
+        using var temp = new TestDirectory();
+        var directory = temp.Session("abandoned-question",
+            """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
+            updatedAt: TestDirectory.Now.AddHours(-hours).AddMinutes(-minutes),
+            cwd: temp.FilePath("removed-workspace"));
+        File.WriteAllText(Path.Combine(directory, "inuse.2147483647.lock"), "");
+        var indexer = new SessionIndexer(temp.Root, temp.Log, _ => false);
+
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        var sessions = indexer.Snapshot!.Sessions;
+        Assert.AreEqual(included ? 1 : 0, sessions.Count);
+        if (included)
+            Assert.AreEqual("offline", sessions[0].Activity);
+    }
+
+    [TestMethod]
+    public void Scan_WaitingProcessStopsWithMissingWorkspace_RemovesStaleQuestionOnNextScan()
+    {
+        using var temp = new TestDirectory();
+        temp.Session("waiting",
+            """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
+            live: true, updatedAt: TestDirectory.Now.AddDays(-19),
+            cwd: temp.FilePath("removed-workspace"));
+        var live = true;
+        var indexer = new SessionIndexer(temp.Root, temp.Log, _ => live);
+
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        Assert.AreEqual("attention", indexer.Snapshot!.Sessions.Single().Activity);
+
+        live = false;
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now.AddSeconds(3)));
+        Assert.AreEqual(0, indexer.Snapshot!.Sessions.Count);
+    }
+
+    [TestMethod]
+    [DataRow(0, true)]
+    [DataRow(3, true)]
+    [DataRow(19, true)]
+    [DataRow(90, true)]
+    [DataRow(91, false)]
+    public void Scan_UnansweredQuestionInExistingWorkspaceWithoutProcess_RemainsVisibleUntilMaximumAge(
+        int days, bool included)
+    {
+        using var temp = new TestDirectory();
+        var workspace = temp.FilePath("resumable-workspace");
+        Directory.CreateDirectory(workspace);
+        var directory = temp.Session("resumable-question",
+            """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
+            updatedAt: TestDirectory.Now.AddDays(-days), cwd: workspace);
+        File.WriteAllText(Path.Combine(directory, "inuse.2147483647.lock"), "");
+        var indexer = new SessionIndexer(temp.Root, temp.Log, _ => false);
+
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        var sessions = indexer.Snapshot!.Sessions;
+        Assert.AreEqual(included ? 1 : 0, sessions.Count);
+        if (included)
+            Assert.AreEqual("attention", sessions[0].Activity);
+    }
+
+    [TestMethod]
+    public void Scan_WaitingWorkspaceIsRemovedAndRestored_ReevaluatesResumabilityOnEachScan()
+    {
+        using var temp = new TestDirectory();
+        var workspace = temp.FilePath("resumable-workspace");
+        Directory.CreateDirectory(workspace);
+        temp.Session("resumable-question",
+            """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
+            updatedAt: TestDirectory.Now.AddDays(-3), cwd: workspace);
+        var indexer = new SessionIndexer(temp.Root, temp.Log, _ => false);
+
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        Assert.AreEqual("attention", indexer.Snapshot!.Sessions.Single().Activity);
+
+        Directory.Delete(workspace);
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now.AddSeconds(3)));
+        Assert.AreEqual(0, indexer.Snapshot!.Sessions.Count);
+
+        Directory.CreateDirectory(workspace);
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now.AddSeconds(6)));
+        Assert.AreEqual("attention", indexer.Snapshot!.Sessions.Single().Activity);
     }
 
     [TestMethod]

@@ -131,7 +131,7 @@ For local sessions, AgentMon reads workspace metadata and recent event types und
 | State | Meaning |
 |---|---|
 | **WORKING** | An active Copilot turn is running |
-| **NEEDS YOU** | A session is waiting for user input |
+| **NEEDS YOU** | A live or resumable session is waiting for user input |
 | **READY** | The session is open and idle |
 | **ASLEEP** | The session process is no longer active |
 
@@ -141,6 +141,14 @@ Sessions with no workspace or event update for more than 90 days are excluded,
 including sessions that still appear to be waiting for input. The cutoff applies
 to both local sessions and Windows relay sessions; offline sessions retain their
 shorter 24-hour visibility window.
+
+An unanswered prompt counts as **NEEDS YOU** if its session process is alive or
+its recorded working directory still exists. Desktop can resume a session in
+an existing workspace even when its process has stopped. If both the process
+and workspace are gone, the session is **ASLEEP** and disappears after 24 hours
+without an update, even if its retained history contains an unanswered question.
+Live and resumable sessions waiting for input remain visible despite inactivity,
+subject to the 90-day maximum age.
 
 ## Build commands
 

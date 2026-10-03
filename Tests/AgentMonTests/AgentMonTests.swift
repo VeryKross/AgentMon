@@ -229,7 +229,7 @@ import Testing
     hasLiveProcess: false,
     updatedAt: stale,
     now: now
-  ) == .attention)
+  ) == .offline)
   #expect(AgentEventParser.activity(
     from: Data((events + "\n" + """
       {"type":"tool.execution_complete","data":{"toolCallId":"question-1"}}
@@ -244,6 +244,56 @@ import Testing
     updatedAt: stale,
     now: now
   ) == .ready)
+}
+
+@Test(arguments: [0.0, 2 * 3_600.0, 19 * 86_400.0])
+func classifiesDormantQuestionByWorkspaceAvailability(age: TimeInterval) {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  let events = """
+    {"type":"assistant.turn_start"}
+    {"type":"tool.execution_start","data":{"toolCallId":"question-1","toolName":"ask_user"}}
+    """
+
+  #expect(AgentEventParser.activity(
+    from: Data(events.utf8),
+    hasLiveProcess: false,
+    updatedAt: now.addingTimeInterval(-age),
+    now: now
+  ) == .offline)
+  #expect(AgentEventParser.activity(
+    from: Data(events.utf8),
+    hasLiveProcess: false,
+    updatedAt: now.addingTimeInterval(-age),
+    now: now,
+    hasAvailableWorkspace: true
+  ) == .attention)
+  #expect(AgentEventParser.activity(
+    from: Data((events + "\n" + """
+      {"type":"tool.execution_complete","data":{"toolCallId":"question-1"}}
+      """).utf8),
+    hasLiveProcess: false,
+    updatedAt: now.addingTimeInterval(-age),
+    now: now,
+    hasAvailableWorkspace: true
+  ) == .offline)
+}
+
+@Test func recognizesOnlyExistingAbsoluteWorkspaceDirectories() throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent("agentmon-workspace-\(UUID().uuidString)", isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+  defer { try? FileManager.default.removeItem(at: directory) }
+
+  #expect(CopilotSessionMonitor.hasAvailableWorkspace(from: ["cwd": directory.path]))
+  #expect(!CopilotSessionMonitor.hasAvailableWorkspace(from: [:]))
+  #expect(!CopilotSessionMonitor.hasAvailableWorkspace(from: ["cwd": ""]))
+  #expect(!CopilotSessionMonitor.hasAvailableWorkspace(from: ["cwd": "."]))
+  #expect(!CopilotSessionMonitor.hasAvailableWorkspace(
+    from: ["cwd": directory.appendingPathComponent("removed-worktree").path]))
+
+  let file = directory.appendingPathComponent("not-a-directory")
+  try Data().write(to: file)
+  #expect(!CopilotSessionMonitor.hasAvailableWorkspace(from: ["cwd": file.path]))
 }
 
 @Test func treatsMissingProcessAsOffline() {
