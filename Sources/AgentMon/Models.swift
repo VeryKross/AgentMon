@@ -142,6 +142,13 @@ struct AgentSession: Identifiable, Equatable, Sendable {
       host: host
     )
   }
+
+  static func priorityOrdered(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
+    if lhs.activity.sortOrder != rhs.activity.sortOrder {
+      return lhs.activity.sortOrder < rhs.activity.sortOrder
+    }
+    return lhs.updatedAt > rhs.updatedAt
+  }
 }
 
 struct WeatherSnapshot: Equatable, Sendable {

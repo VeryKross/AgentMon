@@ -66,6 +66,7 @@ private struct DesktopMenuBar: View {
         Menu {
           Button("Settings…") {
             openSettings()
+            NSApp.activate(ignoringOtherApps: true)
           }
           Divider()
           Button("Quit AgentMon") {
@@ -217,10 +218,6 @@ private struct MetricBlock: View {
 private struct AgentDeskWindow: View {
   @EnvironmentObject private var dashboard: DashboardModel
 
-  private var visibleSessions: [AgentSession] {
-    Array(dashboard.sessions.prefix(4))
-  }
-
   var body: some View {
     RetroWindow(title: "Agent Desk", emphasized: dashboard.attentionCount > 0) {
       VStack(spacing: 0) {
@@ -260,31 +257,26 @@ private struct AgentDeskWindow: View {
           Rectangle().fill(RetroTheme.ink).frame(height: 1)
         }
 
-        if visibleSessions.isEmpty {
+        if dashboard.sessions.isEmpty {
           EmptyAgentDesk()
         } else {
-          VStack(spacing: 0) {
-            ForEach(visibleSessions) { session in
-              AgentRow(session: session)
-              if session.id != visibleSessions.last?.id {
-                DashedRule()
+          ScrollView(.vertical) {
+            LazyVStack(spacing: 0) {
+              ForEach(dashboard.sessions) { session in
+                AgentRow(session: session)
+                if session.id != dashboard.sessions.last?.id {
+                  DashedRule()
+                }
               }
             }
           }
+          .scrollIndicators(.visible)
         }
-
-        Spacer(minLength: 0)
 
         HStack {
           Text("NETWORK SESSION INDEX")
           Spacer()
-          if dashboard.sessions.count > visibleSessions.count {
-            Text(
-              "\(dashboard.hostSummary) • +\(dashboard.sessions.count - visibleSessions.count) MORE"
-            )
-          } else {
-            Text("\(dashboard.hostSummary) • \(dashboard.sessions.count) ON DESK")
-          }
+          Text("\(dashboard.hostSummary) • \(dashboard.sessions.count) ON DESK")
         }
         .font(RetroTheme.font(size: 11, weight: .bold))
         .padding(.horizontal, 16)

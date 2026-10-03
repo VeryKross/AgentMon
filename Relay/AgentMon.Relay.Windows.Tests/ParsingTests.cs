@@ -117,6 +117,7 @@ public sealed class ParsingTests
     [DataRow("""{"type":"assistant.turn_start"}""", false, "offline")]
     [DataRow("", true, "ready")]
     [DataRow("""{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""", true, "attention")]
+    [DataRow("""{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""", false, "attention")]
     [DataRow("""{"type":"tool.execution_start","data":{"toolName":"run","toolCallId":"q","arguments":{"toolName":"ask_user"}}}""", true, "ready")]
     [DataRow("""{"type":"tool.execution_start","data":{"toolName":"ask_user"}}""", true, "ready")]
     [DataRow("""{"type":123}""", true, "ready")]
@@ -155,7 +156,7 @@ public sealed class ParsingTests
         var stale = TestDirectory.Now.AddHours(-2);
         var unanswered = Encoding.UTF8.GetBytes(events);
         Assert.AreEqual("attention", EventTailReader.Activity(unanswered, true, stale, TestDirectory.Now));
-        Assert.AreEqual("offline", EventTailReader.Activity(unanswered, false, stale, TestDirectory.Now));
+        Assert.AreEqual("attention", EventTailReader.Activity(unanswered, false, stale, TestDirectory.Now));
         var answered = Encoding.UTF8.GetBytes(events + "\n" + """{"type":"tool.execution_complete","data":{"toolCallId":"q"}}""");
         Assert.AreEqual("ready", EventTailReader.Activity(answered, true, stale, TestDirectory.Now));
     }

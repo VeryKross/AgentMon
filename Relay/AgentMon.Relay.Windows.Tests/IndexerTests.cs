@@ -15,6 +15,8 @@ public sealed class IndexerTests
             temp.Session($"offline-{i:D2}", updatedAt: TestDirectory.Now.AddSeconds(-i));
         temp.Session("working", """{"type":"assistant.turn_start"}""", live: true, TestDirectory.Now.AddMinutes(-10));
         temp.Session("attention", """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""", live: true);
+        temp.Session("dormant-attention", """{"type":"tool.execution_start","data":{"toolName":"ask_user","toolCallId":"q"}}""",
+            updatedAt: TestDirectory.Now.AddDays(-3));
         temp.Session("ready", live: true);
         temp.Session("old", updatedAt: TestDirectory.Now.AddDays(-2));
         temp.Session("pending-session-123", live: true);
@@ -23,7 +25,7 @@ public sealed class IndexerTests
         Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
         var sessions = indexer.Snapshot!.Sessions;
         Assert.AreEqual(50, sessions.Count);
-        CollectionAssert.AreEqual(new[] { "attention", "working", "ready", "offline-00", "offline-01" },
+        CollectionAssert.AreEqual(new[] { "attention", "dormant-attention", "working", "ready", "offline-00" },
             sessions.Take(5).Select(session => session.Id).ToArray());
         Assert.IsFalse(sessions.Any(session => session.Id is "old" or "pending-session-123"));
     }

@@ -25,8 +25,6 @@ internal static class EventTailReader
 
     internal static string Activity(ReadOnlyMemory<byte> tail, bool live, DateTimeOffset updatedAt, DateTimeOffset now)
     {
-        if (!live)
-            return "offline";
         var recent = now - updatedAt < TimeSpan.FromMinutes(15);
 
         var completed = new HashSet<string>(StringComparer.Ordinal);
@@ -55,16 +53,18 @@ internal static class EventTailReader
                     return "attention";
                 }
                 else if (type == "assistant.turn_start")
-                    return recent ? "working" : "ready";
+                    return live ? recent ? "working" : "ready" : "offline";
                 else if (type == "assistant.turn_end")
-                    return "ready";
+                    return live ? "ready" : "offline";
+                else if (type == "user.message")
+                    return live ? recent ? "working" : "ready" : "offline";
             }
             catch (JsonException)
             {
                 // Copilot can be in the middle of writing a line; no event contents are logged.
             }
         }
-        return "ready";
+        return live ? "ready" : "offline";
     }
 
     private static string? StringProperty(JsonElement element, string name)

@@ -79,6 +79,37 @@ import Testing
   #expect(activity == .ready)
 }
 
+@Test func detectsWorkingAgentBeforeAssistantTurnStarts() {
+  let events = """
+    {"type":"assistant.turn_start"}
+    {"type":"assistant.turn_end"}
+    {"type":"user.message"}
+    {"type":"hook.start"}
+    {"type":"hook.end"}
+    """.data(using: .utf8)!
+
+  let activity = AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  )
+
+  #expect(activity == .working)
+}
+
+@Test func ignoresStaleMessageWithoutAssistantTurn() {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  let activity = AgentEventParser.activity(
+    from: Data(#"{"type":"user.message"}"#.utf8),
+    hasLiveProcess: true,
+    updatedAt: now.addingTimeInterval(-16 * 60),
+    now: now
+  )
+
+  #expect(activity == .ready)
+}
+
 @Test func detectsAgentWaitingForUser() {
   let events = """
     {"type":"assistant.turn_start"}
@@ -132,7 +163,7 @@ import Testing
     hasLiveProcess: false,
     updatedAt: stale,
     now: now
-  ) == .offline)
+  ) == .attention)
   #expect(AgentEventParser.activity(
     from: Data((events + "\n" + """
       {"type":"tool.execution_complete","data":{"toolCallId":"question-1"}}
@@ -158,6 +189,29 @@ import Testing
   )
 
   #expect(activity == .offline)
+}
+
+@Test func prioritizesDormantAttentionSessionOverRecentActivity() {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  func session(_ id: String, _ activity: AgentActivity, updatedAt: Date) -> AgentSession {
+    AgentSession(
+      id: id,
+      project: "AgentMon",
+      task: id,
+      repository: nil,
+      branch: nil,
+      activity: activity,
+      updatedAt: updatedAt
+    )
+  }
+
+  let sessions = [
+    session("ready-now", .ready, updatedAt: now),
+    session("working-now", .working, updatedAt: now),
+    session("waiting-yesterday", .attention, updatedAt: now.addingTimeInterval(-86_400)),
+  ].sorted(by: AgentSession.priorityOrdered)
+
+  #expect(sessions.map(\.id) == ["waiting-yesterday", "working-now", "ready-now"])
 }
 
 @Test func flashesOnlyWhenAnExistingWorkingSessionBecomesReady() {

@@ -35,6 +35,11 @@ struct AgentMonApp: App {
     Settings {
       SettingsView()
         .environmentObject(dashboard)
+        .background(
+          SettingsWindowAccessor { window in
+            SettingsWindowController.shared.configure(window)
+          }
+        )
     }
   }
 }
@@ -113,7 +118,7 @@ final class DashboardWindowController {
   }
 
   private func fill(_ window: NSWindow, on screen: NSScreen) {
-    window.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 1)
+    window.level = .normal
     window.styleMask = [.borderless, .resizable]
     window.setFrame(screen.frame, display: true, animate: false)
     window.makeKeyAndOrderFront(nil)
@@ -126,8 +131,61 @@ final class DashboardWindowController {
   }
 }
 
+private struct SettingsWindowAccessor: NSViewRepresentable {
+  let onWindowAvailable: (NSWindow) -> Void
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    DispatchQueue.main.async {
+      if let window = view.window {
+        onWindowAvailable(window)
+      }
+    }
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    DispatchQueue.main.async {
+      if let window = nsView.window {
+        onWindowAvailable(window)
+      }
+    }
+  }
+}
+
+@MainActor
+final class SettingsWindowController {
+  static let shared = SettingsWindowController()
+
+  private var configuredWindows = Set<ObjectIdentifier>()
+
+  func configure(_ window: NSWindow) {
+    let identifier = ObjectIdentifier(window)
+    if configuredWindows.insert(identifier).inserted {
+      window.title = "AgentMon Settings"
+      window.collectionBehavior.insert(.moveToActiveSpace)
+
+      if let primaryScreen = NSScreen.screens.first {
+        let visibleFrame = primaryScreen.visibleFrame
+        window.setFrameOrigin(
+          NSPoint(
+            x: visibleFrame.midX - window.frame.width / 2,
+            y: visibleFrame.midY - window.frame.height / 2
+          )
+        )
+      } else {
+        window.center()
+      }
+    }
+
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+  }
+}
+
 private struct MenuBarPanel: View {
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.openSettings) private var openSettings
   @EnvironmentObject private var dashboard: DashboardModel
 
   var body: some View {
@@ -168,8 +226,9 @@ private struct MenuBarPanel: View {
         DashboardWindowController.shared.useWindowedMode()
       }
 
-      SettingsLink {
-        Text("Settings…")
+      Button("Settings…") {
+        openSettings()
+        NSApp.activate(ignoringOtherApps: true)
       }
 
       Divider()

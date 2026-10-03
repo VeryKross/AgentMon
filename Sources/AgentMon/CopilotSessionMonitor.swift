@@ -23,12 +23,7 @@ struct CopilotSessionMonitor {
       return session(at: directory, now: now)
     }
     .filter { $0.activity != .offline || now.timeIntervalSince($0.updatedAt) < 86_400 }
-    .sorted {
-      if $0.activity.sortOrder != $1.activity.sortOrder {
-        return $0.activity.sortOrder < $1.activity.sortOrder
-      }
-      return $0.updatedAt > $1.updatedAt
-    }
+    .sorted(by: AgentSession.priorityOrdered)
   }
 
   private func session(at directory: URL, now: Date) -> AgentSession? {
@@ -176,8 +171,6 @@ enum AgentEventParser {
     updatedAt: Date,
     now: Date
   ) -> AgentActivity {
-    guard hasLiveProcess else { return .offline }
-
     let recent = now.timeIntervalSince(updatedAt) < 15 * 60
 
     let lines = data.split(separator: 0x0A).reversed()
@@ -206,14 +199,19 @@ enum AgentEventParser {
       }
 
       if type == "assistant.turn_start" {
+        guard hasLiveProcess else { return .offline }
         return recent ? .working : .ready
       }
       if type == "assistant.turn_end" {
-        return .ready
+        return hasLiveProcess ? .ready : .offline
+      }
+      if type == "user.message" {
+        guard hasLiveProcess else { return .offline }
+        return recent ? .working : .ready
       }
     }
 
-    return .ready
+    return hasLiveProcess ? .ready : .offline
   }
 }
 
