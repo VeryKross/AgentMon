@@ -22,6 +22,7 @@ struct CopilotSessionMonitor {
       guard !directory.lastPathComponent.hasPrefix("pending-session") else { return nil }
       return session(at: directory, now: now)
     }
+    .filter { $0.isWithinMaximumAge(now: now) }
     .filter { $0.activity != .offline || now.timeIntervalSince($0.updatedAt) < 86_400 }
     .sorted(by: AgentSession.priorityOrdered)
   }

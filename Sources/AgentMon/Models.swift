@@ -143,6 +143,10 @@ struct AgentSession: Identifiable, Equatable, Sendable {
     )
   }
 
+  func isWithinMaximumAge(now: Date) -> Bool {
+    now.timeIntervalSince(updatedAt) <= 90 * 86_400
+  }
+
   static func priorityOrdered(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
     if lhs.activity.sortOrder != rhs.activity.sortOrder {
       return lhs.activity.sortOrder < rhs.activity.sortOrder

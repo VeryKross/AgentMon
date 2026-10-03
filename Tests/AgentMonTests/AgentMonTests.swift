@@ -214,6 +214,45 @@ import Testing
   #expect(sessions.map(\.id) == ["waiting-yesterday", "working-now", "ready-now"])
 }
 
+@Test func excludesSessionsOver90DaysRegardlessOfActivityOrHost() {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  let remote = AgentHost(id: "windows", name: "Windows", platform: .windows, isLocal: false)
+
+  for host in [AgentHost.local, remote] {
+    for activity in [AgentActivity.attention, .working, .ready, .offline] {
+      for age in [89 * 86_400, 90 * 86_400, 90 * 86_400 + 1, 201 * 86_400] {
+        let session = AgentSession(
+          id: "session",
+          project: "AgentMon",
+          task: "Old session",
+          repository: nil,
+          branch: nil,
+          activity: activity,
+          updatedAt: now.addingTimeInterval(-Double(age)),
+          host: host
+        )
+        #expect(session.isWithinMaximumAge(now: now) == (age <= 90 * 86_400))
+      }
+    }
+  }
+}
+
+@Test func sessionCrossing90DayCutoffBecomesIneligible() {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  let session = AgentSession(
+    id: "session",
+    project: "AgentMon",
+    task: "Pending question",
+    repository: nil,
+    branch: nil,
+    activity: .attention,
+    updatedAt: now.addingTimeInterval(-90 * 86_400)
+  )
+
+  #expect(session.isWithinMaximumAge(now: now))
+  #expect(!session.isWithinMaximumAge(now: now.addingTimeInterval(1)))
+}
+
 @Test func flashesOnlyWhenAnExistingWorkingSessionBecomesReady() {
   var tracker = SessionCompletionTracker()
 
