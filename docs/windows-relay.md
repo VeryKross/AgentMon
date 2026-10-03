@@ -140,7 +140,13 @@ alive or an unanswered question remains. A new update makes a session eligible
 again. As in the Mac adapter, a live
 session with no recent event activity for 15 minutes is treated as ready
 unless it is still waiting for an unanswered `ask_user` question. An unanswered
-question stays in attention until answered, subject to the 90-day cutoff.
+question stays in attention while the session process is alive or its recorded
+absolute working directory still exists, subject to the 90-day cutoff. Desktop
+can resume a session in an existing workspace without a currently running
+process. If both the process and workspace are gone, the session is offline
+even if the question remains unanswered, and is excluded once its latest update
+is at least 24 hours old. Stale PID lock files alone do not keep abandoned
+questions in attention.
 
 HTTPS responses contain only the protocol's host/session IDs, host display
 name, platform, project basename, workspace title (maximum 120 Unicode scalars),

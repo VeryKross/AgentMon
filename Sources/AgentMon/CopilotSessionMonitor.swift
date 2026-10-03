@@ -45,7 +45,8 @@ struct CopilotSessionMonitor {
       from: Self.tail(of: eventsURL),
       hasLiveProcess: hasLiveProcess,
       updatedAt: updatedAt,
-      now: now
+      now: now,
+      hasAvailableWorkspace: Self.hasAvailableWorkspace(from: fields)
     )
 
     let repository = fields["repository"]
@@ -62,6 +63,13 @@ struct CopilotSessionMonitor {
       activity: activity,
       updatedAt: updatedAt
     )
+  }
+
+  static func hasAvailableWorkspace(from fields: [String: String]) -> Bool {
+    guard let cwd = fields["cwd"], cwd.hasPrefix("/") else { return false }
+    var isDirectory: ObjCBool = false
+    return FileManager.default.fileExists(atPath: cwd, isDirectory: &isDirectory)
+      && isDirectory.boolValue
   }
 
   static func projectName(from fields: [String: String]) -> String {
@@ -206,7 +214,8 @@ enum AgentEventParser {
     from data: Data,
     hasLiveProcess: Bool,
     updatedAt: Date,
-    now: Date
+    now: Date,
+    hasAvailableWorkspace: Bool = false
   ) -> AgentActivity {
     let recent = now.timeIntervalSince(updatedAt) < 15 * 60
 
@@ -246,7 +255,7 @@ enum AgentEventParser {
         !completedToolCalls.contains(toolCallID),
         !assistantTurnEnded
       {
-        return .attention
+        return hasLiveProcess || hasAvailableWorkspace ? .attention : .offline
       }
 
       if type == "assistant.turn_start" {
