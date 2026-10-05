@@ -205,6 +205,31 @@ public sealed class ParsingTests
     }
 
     [TestMethod]
+    public void Activity_ActiveDescendantKeepsCompletedFusionWorking()
+    {
+        const string events = """
+            {"type":"user.message"}
+            {"type":"assistant.turn_start"}
+            {"type":"assistant.turn_end"}
+            {"type":"session.fusion_completed"}
+            """;
+        Assert.AreEqual("working", EventTailReader.Activity(
+            Encoding.UTF8.GetBytes(events), true, Now, Now, hasActiveDescendant: true));
+    }
+
+    [TestMethod]
+    public void Activity_QuestionStillOutranksActiveDescendant()
+    {
+        const string events = """
+            {"type":"session.fusion_completed"}
+            {"type":"assistant.turn_start"}
+            {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"q","name":"ask_user"}]}}}
+            """;
+        Assert.AreEqual("attention", EventTailReader.Activity(
+            Encoding.UTF8.GetBytes(events), true, Now, Now, hasActiveDescendant: true));
+    }
+
+    [TestMethod]
     public void Activity_UnansweredQuestionRemainsAttentionAfterInactivityUntilAnsweredOrOffline()
     {
         const string events = """

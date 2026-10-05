@@ -7,6 +7,7 @@ struct CopilotSessionMonitor {
   func sessions(now: Date = .now) -> [AgentSession] {
     let root = fileManager.homeDirectoryForCurrentUser
       .appendingPathComponent(".copilot/session-state", isDirectory: true)
+    let processTree = ProcessTreeSnapshot.capture()
 
     guard
       let directories = try? fileManager.contentsOfDirectory(
@@ -20,14 +21,18 @@ struct CopilotSessionMonitor {
 
     return directories.compactMap { directory in
       guard !directory.lastPathComponent.hasPrefix("pending-session") else { return nil }
-      return session(at: directory, now: now)
+      return session(at: directory, now: now, processTree: processTree)
     }
     .filter { $0.isWithinMaximumAge(now: now) }
     .filter { $0.activity != .offline || now.timeIntervalSince($0.updatedAt) < 86_400 }
     .sorted(by: AgentSession.priorityOrdered)
   }
 
-  private func session(at directory: URL, now: Date) -> AgentSession? {
+  private func session(
+    at directory: URL,
+    now: Date,
+    processTree: ProcessTreeSnapshot
+  ) -> AgentSession? {
     let workspaceURL = directory.appendingPathComponent("workspace.yaml")
     guard let workspaceText = try? String(contentsOf: workspaceURL, encoding: .utf8) else {
       return nil
@@ -40,10 +45,12 @@ struct CopilotSessionMonitor {
     let eventDate = modificationDate(for: eventsURL)
     let workspaceDate = parseDate(fields["updated_at"]) ?? modificationDate(for: workspaceURL)
     let updatedAt = max(eventDate, workspaceDate)
-    let hasLiveProcess = liveSessionPID(in: directory) != nil
+    let livePID = liveSessionPID(in: directory)
+    let hasLiveProcess = livePID != nil
     let activity = AgentEventParser.activity(
       from: Self.tail(of: eventsURL),
       hasLiveProcess: hasLiveProcess,
+      hasActiveDescendant: livePID.map(processTree.hasActiveDescendant(of:)) ?? false,
       updatedAt: updatedAt,
       now: now,
       hasAvailableWorkspace: Self.hasAvailableWorkspace(from: fields)
@@ -190,6 +197,69 @@ struct CopilotSessionMonitor {
   }
 }
 
+struct ProcessTreeSnapshot {
+  struct Entry: Equatable {
+    let pid: Int32
+    let parentPID: Int32
+    let command: String
+  }
+
+  private let childrenByParent: [Int32: [Entry]]
+
+  init(entries: [Entry]) {
+    childrenByParent = Dictionary(grouping: entries, by: \.parentPID)
+  }
+
+  static func capture() -> ProcessTreeSnapshot {
+    let process = Process()
+    let output = Pipe()
+    process.executableURL = URL(fileURLWithPath: "/bin/ps")
+    process.arguments = ["-axo", "pid=,ppid=,command="]
+    process.standardOutput = output
+    process.standardError = FileHandle.nullDevice
+
+    guard (try? process.run()) != nil else {
+      return ProcessTreeSnapshot(entries: [])
+    }
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0,
+      let text = String(data: data, encoding: .utf8)
+    else {
+      return ProcessTreeSnapshot(entries: [])
+    }
+
+    let entries = text.split(whereSeparator: \.isNewline).compactMap { line -> Entry? in
+      let fields = line.split(
+        maxSplits: 2,
+        omittingEmptySubsequences: true,
+        whereSeparator: \.isWhitespace
+      )
+      guard fields.count == 3,
+        let pid = Int32(fields[0]),
+        let parentPID = Int32(fields[1])
+      else { return nil }
+      return Entry(pid: pid, parentPID: parentPID, command: String(fields[2]))
+    }
+    return ProcessTreeSnapshot(entries: entries)
+  }
+
+  func hasActiveDescendant(of rootPID: Int32) -> Bool {
+    var pending = childrenByParent[rootPID] ?? []
+    var visited = Set<Int32>()
+
+    while let process = pending.popLast() {
+      guard visited.insert(process.pid).inserted else { continue }
+      guard Self.isPersistentHelper(process.command) else { return true }
+    }
+    return false
+  }
+
+  private static func isPersistentHelper(_ command: String) -> Bool {
+    command.contains("/computer-use-mcp")
+  }
+}
+
 enum WorkspaceYAMLParser {
   static func parse(_ source: String) -> [String: String] {
     var result: [String: String] = [:]
@@ -222,6 +292,7 @@ enum AgentEventParser {
   static func activity(
     from data: Data,
     hasLiveProcess: Bool,
+    hasActiveDescendant: Bool = false,
     updatedAt: Date,
     now: Date,
     hasAvailableWorkspace: Bool = false
@@ -238,7 +309,8 @@ enum AgentEventParser {
       else { continue }
 
       if type == "session.fusion_completed" {
-        return hasLiveProcess ? .ready : .offline
+        guard hasLiveProcess else { return .offline }
+        return hasActiveDescendant ? .working : .ready
       }
 
       if type == "session.fusion_commit_started"
@@ -303,7 +375,8 @@ enum AgentEventParser {
       }
     }
 
-    return hasLiveProcess ? .ready : .offline
+    guard hasLiveProcess else { return .offline }
+    return hasActiveDescendant ? .working : .ready
   }
 }
 

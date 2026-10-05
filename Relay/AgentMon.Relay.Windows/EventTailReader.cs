@@ -24,7 +24,7 @@ internal static class EventTailReader
     }
 
     internal static string Activity(ReadOnlyMemory<byte> tail, bool live, DateTimeOffset updatedAt, DateTimeOffset now,
-        bool hasAvailableWorkspace = false)
+        bool hasAvailableWorkspace = false, bool hasActiveDescendant = false)
     {
         var recent = now - updatedAt < TimeSpan.FromMinutes(15);
 
@@ -44,7 +44,7 @@ internal static class EventTailReader
                 var root = document.RootElement;
                 var type = StringProperty(root, "type");
                 if (type == "session.fusion_completed")
-                    return live ? "ready" : "offline";
+                    return live ? hasActiveDescendant ? "working" : "ready" : "offline";
                 if (type is "session.fusion_commit_started" or "session.fusion_handoff" ||
                     type?.StartsWith("model.", StringComparison.Ordinal) == true)
                     return live ? recent ? "working" : "ready" : "offline";
@@ -84,7 +84,7 @@ internal static class EventTailReader
                 // Copilot can be in the middle of writing a line; no event contents are logged.
             }
         }
-        return live ? "ready" : "offline";
+        return live ? hasActiveDescendant ? "working" : "ready" : "offline";
     }
 
     private static string? StringProperty(JsonElement element, string name)

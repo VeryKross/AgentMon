@@ -119,6 +119,68 @@ import Testing
   ) == .ready)
 }
 
+@Test func activeDescendantKeepsCompletedFusionWorking() {
+  let events = """
+    {"type":"user.message"}
+    {"type":"assistant.turn_start"}
+    {"type":"assistant.turn_end"}
+    {"type":"session.fusion_completed"}
+    """.data(using: .utf8)!
+
+  #expect(AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    hasActiveDescendant: true,
+    updatedAt: .now,
+    now: .now
+  ) == .working)
+}
+
+@Test func questionStillOutranksActiveDescendant() {
+  let events = """
+    {"type":"session.fusion_completed"}
+    {"type":"assistant.turn_start"}
+    {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"question-1","name":"ask_user"}]}}}
+    """.data(using: .utf8)!
+
+  #expect(AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    hasActiveDescendant: true,
+    updatedAt: .now,
+    now: .now
+  ) == .attention)
+}
+
+@Test func processTreeFindsWorkButIgnoresPersistentHelpers() {
+  let tree = ProcessTreeSnapshot(entries: [
+    .init(pid: 20, parentPID: 10, command: "/plugins/computer-use/computer-use-mcp"),
+    .init(pid: 30, parentPID: 10, command: "/usr/bin/xcodebuild test"),
+    .init(pid: 40, parentPID: 20, command: "/plugins/helper-child"),
+    .init(pid: 60, parentPID: 50, command: "/plugins/computer-use/computer-use-mcp"),
+    .init(pid: 70, parentPID: 60, command: "/plugins/helper-child"),
+  ])
+
+  #expect(tree.hasActiveDescendant(of: 10))
+  #expect(!tree.hasActiveDescendant(of: 50))
+  #expect(!tree.hasActiveDescendant(of: 999))
+}
+
+@Test func processTreeCaptureFindsLiveChild() throws {
+  let child = Process()
+  child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+  child.arguments = ["5"]
+  try child.run()
+  defer {
+    if child.isRunning {
+      child.terminate()
+    }
+    child.waitUntilExit()
+  }
+
+  #expect(ProcessTreeSnapshot.capture().hasActiveDescendant(of: getpid()))
+}
+
 @Test func expandsEventTailPastHookTrafficToFindLifecycle() throws {
   let url = FileManager.default.temporaryDirectory
     .appendingPathComponent("agentmon-events-\(UUID().uuidString).jsonl")
