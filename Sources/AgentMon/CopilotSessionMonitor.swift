@@ -159,6 +159,15 @@ struct CopilotSessionMonitor {
       {
         return true
       }
+      if type == "hook.start",
+        let payload = object["data"] as? [String: Any],
+        payload["hookType"] as? String == "preToolUse",
+        let input = payload["input"] as? [String: Any],
+        let toolCalls = input["toolCalls"] as? [[String: Any]],
+        toolCalls.contains(where: { $0["name"] as? String == "ask_user" })
+      {
+        return true
+      }
     }
     return false
   }
@@ -246,6 +255,24 @@ enum AgentEventParser {
       {
         completedToolCalls.insert(toolCallID)
         continue
+      }
+
+      if type == "hook.start",
+        let payload = object["data"] as? [String: Any],
+        payload["hookType"] as? String == "preToolUse",
+        let input = payload["input"] as? [String: Any],
+        let toolCalls = input["toolCalls"] as? [[String: Any]],
+        !toolCalls.isEmpty
+      {
+        let hasPendingQuestion = toolCalls.contains(where: {
+          $0["name"] as? String == "ask_user"
+            && ($0["id"] as? String).map { !completedToolCalls.contains($0) } == true
+        })
+        if hasPendingQuestion {
+          return hasLiveProcess || hasAvailableWorkspace ? .attention : .offline
+        }
+        guard hasLiveProcess else { return .offline }
+        return recent ? .working : .ready
       }
 
       if type == "tool.execution_start",

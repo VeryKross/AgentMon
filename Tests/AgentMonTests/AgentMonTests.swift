@@ -192,6 +192,69 @@ import Testing
   #expect(activity == .attention)
 }
 
+@Test func detectsAgentBlockedBeforeAskUserExecution() {
+  let events = """
+    {"type":"assistant.turn_start"}
+    {"type":"hook.start","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","input":{"toolCalls":[{"id":"question-1","name":"ask_user"}]}}}
+    """.data(using: .utf8)!
+
+  #expect(AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .attention)
+}
+
+@Test func preToolHookEndDoesNotMeanUserAnswered() {
+  let events = """
+    {"type":"assistant.turn_start"}
+    {"type":"hook.start","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","input":{"toolCalls":[{"id":"question-1","name":"ask_user"}]}}}
+    {"type":"hook.end","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","success":true}}
+    """.data(using: .utf8)!
+
+  #expect(AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .attention)
+}
+
+@Test func ignoresAnsweredAskUserPreToolHook() {
+  let events = """
+    {"type":"assistant.turn_start"}
+    {"type":"hook.start","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","input":{"toolCalls":[{"id":"question-1","name":"ask_user"}]}}}
+    {"type":"hook.end","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","success":true}}
+    {"type":"tool.execution_start","data":{"toolCallId":"question-1","toolName":"ask_user"}}
+    {"type":"tool.execution_complete","data":{"toolCallId":"question-1"}}
+    """.data(using: .utf8)!
+
+  #expect(AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .working)
+}
+
+@Test func newerPreToolWorkSupersedesOldQuestionHook() {
+  let events = """
+    {"type":"assistant.turn_start"}
+    {"type":"hook.start","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","input":{"toolCalls":[{"id":"question-1","name":"ask_user"}]}}}
+    {"type":"hook.end","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","success":true}}
+    {"type":"hook.start","data":{"hookInvocationId":"hook-2","hookType":"preToolUse","input":{"toolCalls":[{"id":"tool-2","name":"bash"}]}}}
+    {"type":"hook.end","data":{"hookInvocationId":"hook-2","hookType":"preToolUse","success":true}}
+    """.data(using: .utf8)!
+
+  #expect(AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .working)
+}
+
 @Test func ignoresAnsweredUserQuestion() {
   let events = """
     {"type":"assistant.turn_start"}

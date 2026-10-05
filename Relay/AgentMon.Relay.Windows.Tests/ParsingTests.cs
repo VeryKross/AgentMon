@@ -140,6 +140,36 @@ public sealed class ParsingTests
     }
 
     [TestMethod]
+    public void Activity_PreToolAskUserHook_IsAttentionUntilToolExecutes()
+    {
+        const string waiting = """
+            {"type":"assistant.turn_start"}
+            {"type":"hook.start","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","input":{"toolCalls":[{"id":"q","name":"ask_user"}]}}}
+            """;
+        Assert.AreEqual("attention", Activity(waiting));
+        var hookCompleted = waiting + "\n" +
+            """{"type":"hook.end","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","success":true}}""";
+        Assert.AreEqual("attention", Activity(hookCompleted));
+        Assert.AreEqual("working", Activity(hookCompleted + "\n" + """
+            {"type":"tool.execution_start","data":{"toolCallId":"q","toolName":"ask_user"}}
+            {"type":"tool.execution_complete","data":{"toolCallId":"q"}}
+            """));
+    }
+
+    [TestMethod]
+    public void Activity_NewerPreToolWorkSupersedesOldQuestionHook()
+    {
+        const string events = """
+            {"type":"assistant.turn_start"}
+            {"type":"hook.start","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","input":{"toolCalls":[{"id":"q","name":"ask_user"}]}}}
+            {"type":"hook.end","data":{"hookInvocationId":"hook-1","hookType":"preToolUse","success":true}}
+            {"type":"hook.start","data":{"hookInvocationId":"hook-2","hookType":"preToolUse","input":{"toolCalls":[{"id":"t","name":"run"}]}}}
+            {"type":"hook.end","data":{"hookInvocationId":"hook-2","hookType":"preToolUse","success":true}}
+            """;
+        Assert.AreEqual("working", Activity(events));
+    }
+
+    [TestMethod]
     public void Activity_OldActiveEventsWithLiveProcess_ReturnsReady()
     {
         var bytes = Encoding.UTF8.GetBytes("""{"type":"assistant.turn_start"}""");

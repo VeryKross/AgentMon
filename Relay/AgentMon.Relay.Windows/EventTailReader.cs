@@ -53,6 +53,14 @@ internal static class EventTailReader
                     if (StringProperty(finished, "toolCallId") is { } completedId)
                         completed.Add(completedId);
                 }
+                else if (type == "hook.start" && root.TryGetProperty("data", out var hookStart) &&
+                         StringProperty(hookStart, "hookType") == "preToolUse" &&
+                         TryGetToolCalls(hookStart, out var toolCalls))
+                {
+                    if (ContainsUnexecutedAskUserCall(toolCalls, completed))
+                        return live || hasAvailableWorkspace ? "attention" : "offline";
+                    return live ? recent ? "working" : "ready" : "offline";
+                }
                 else if (type == "tool.execution_start" && root.TryGetProperty("data", out var started) &&
                          StringProperty(started, "toolName") == "ask_user" &&
                          StringProperty(started, "toolCallId") is { } questionId && !completed.Contains(questionId) &&
@@ -82,4 +90,21 @@ internal static class EventTailReader
     private static string? StringProperty(JsonElement element, string name)
         => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) &&
            value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static bool TryGetToolCalls(JsonElement hook, out JsonElement calls)
+    {
+        if (!hook.TryGetProperty("input", out var input) || input.ValueKind != JsonValueKind.Object ||
+            !input.TryGetProperty("toolCalls", out calls) || calls.ValueKind != JsonValueKind.Array ||
+            calls.GetArrayLength() == 0)
+            return false;
+        return true;
+    }
+
+    private static bool ContainsUnexecutedAskUserCall(JsonElement calls, HashSet<string> completed)
+    {
+        return calls.EnumerateArray().Any(call =>
+            StringProperty(call, "name") == "ask_user" &&
+            StringProperty(call, "id") is { } id &&
+            !completed.Contains(id));
+    }
 }
