@@ -119,6 +119,91 @@ import Testing
   ) == .ready)
 }
 
+@Test(arguments: ["agentStop", "sessionEnd"], [0.0, 11 * 60.0, 16 * 60.0])
+func completedStopHookEndsTurnWithoutFusionEvent(hookType: String, age: TimeInterval) {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  let events = """
+    {"type":"user.message"}
+    {"type":"assistant.turn_start"}
+    {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"tool-1","name":"bash"}]}}}
+    {"type":"tool.execution_complete","data":{"toolCallId":"tool-1"}}
+    {"type":"assistant.turn_end"}
+    {"type":"assistant.turn_start"}
+    {"type":"assistant.message"}
+    {"type":"assistant.turn_end"}
+    {"type":"hook.start","data":{"hookType":"\(hookType)"}}
+    {"type":"hook.end","data":{"hookType":"\(hookType)","success":true}}
+    {"type":"session.usage_checkpoint"}
+    """
+
+  for live in [true, false] {
+    #expect(AgentEventParser.activity(
+      from: Data(events.utf8),
+      hasLiveProcess: live,
+      updatedAt: now.addingTimeInterval(-age),
+      now: now,
+      hasAvailableWorkspace: true
+    ) == (live ? .ready : .offline))
+  }
+}
+
+@Test(arguments: ["agentStop", "sessionEnd"])
+func stopHookDoesNotFinishTurnBeforeSuccessfulCompletion(hookType: String) {
+  let events = """
+    {"type":"user.message"}
+    {"type":"model.turn_started"}
+    {"type":"assistant.turn_end"}
+    {"type":"hook.start","data":{"hookType":"\(hookType)"}}
+    """
+
+  for suffix in ["", "\n" + """
+    {"type":"hook.end","data":{"hookType":"\(hookType)","success":false}}
+    """] {
+    #expect(AgentEventParser.activity(
+      from: Data((events + suffix).utf8),
+      hasLiveProcess: true,
+      updatedAt: .now,
+      now: .now
+    ) == .working)
+  }
+}
+
+@Test(arguments: ["agentStop", "sessionEnd"])
+func newerActivitySupersedesCompletedStopHook(hookType: String) {
+  let completed = """
+    {"type":"hook.end","data":{"hookType":"\(hookType)","success":true}}
+    """
+  for next in [
+    #"{"type":"user.message"}"#,
+    #"{"type":"model.turn_started"}"#,
+    #"{"type":"assistant.turn_start"}"#,
+    #"{"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"tool-2","name":"bash"}]}}}"#,
+  ] {
+    #expect(AgentEventParser.activity(
+      from: Data((completed + "\n" + next).utf8),
+      hasLiveProcess: true,
+      updatedAt: .now,
+      now: .now
+    ) == .working)
+  }
+
+  let question = """
+    {"type":"tool.execution_start","data":{"toolCallId":"question-1","toolName":"ask_user"}}
+    """
+  #expect(AgentEventParser.activity(
+    from: Data((question + "\n" + completed).utf8),
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .ready)
+  #expect(AgentEventParser.activity(
+    from: Data((completed + "\n" + question).utf8),
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .attention)
+}
+
 @Test func activeDescendantKeepsCompletedFusionWorking() {
   let events = """
     {"type":"user.message"}
@@ -205,6 +290,31 @@ import Testing
     updatedAt: .now,
     now: .now
   ) == .working)
+}
+
+@Test(arguments: ["agentStop", "sessionEnd"])
+func completedStopHookIsEventTailBoundary(hookType: String) throws {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent("agentmon-events-\(UUID().uuidString).jsonl")
+  defer { try? FileManager.default.removeItem(at: url) }
+
+  var events = Data("{\"type\":\"user.message\"}\n".utf8)
+  events.append(Data(repeating: 0x20, count: 160 * 1_024))
+  events.append(Data("""
+
+    {"type":"hook.end","data":{"hookType":"\(hookType)","success":true}}
+    {"type":"session.usage_checkpoint"}
+    """.utf8))
+  try events.write(to: url)
+
+  let tail = CopilotSessionMonitor.tail(of: url)
+  #expect(tail.count <= 128 * 1_024)
+  #expect(AgentEventParser.activity(
+    from: tail,
+    hasLiveProcess: true,
+    updatedAt: .now,
+    now: .now
+  ) == .ready)
 }
 
 @Test func detectsWorkingAgentBeforeAssistantTurnStarts() {

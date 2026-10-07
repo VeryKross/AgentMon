@@ -43,7 +43,7 @@ internal static class EventTailReader
                 using var document = JsonDocument.Parse(line, new JsonDocumentOptions { MaxDepth = 64 });
                 var root = document.RootElement;
                 var type = StringProperty(root, "type");
-                if (type == "session.fusion_completed")
+                if (IsTurnCompletion(root, type))
                     return live ? hasActiveDescendant ? "working" : "ready" : "offline";
                 if (type is "session.fusion_commit_started" or "session.fusion_handoff" ||
                     type?.StartsWith("model.", StringComparison.Ordinal) == true)
@@ -87,12 +87,20 @@ internal static class EventTailReader
         return live ? hasActiveDescendant ? "working" : "ready" : "offline";
     }
 
+    private static bool IsTurnCompletion(JsonElement root, string? type)
+        => type == "session.fusion_completed" ||
+           type == "hook.end" && root.TryGetProperty("data", out var data) &&
+           data.ValueKind == JsonValueKind.Object &&
+           data.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True &&
+           StringProperty(data, "hookType") is "agentStop" or "sessionEnd";
+
     private static string? StringProperty(JsonElement element, string name)
         => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) &&
            value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static bool TryGetToolCalls(JsonElement hook, out JsonElement calls)
     {
+        calls = default;
         if (!hook.TryGetProperty("input", out var input) || input.ValueKind != JsonValueKind.Object ||
             !input.TryGetProperty("toolCalls", out calls) || calls.ValueKind != JsonValueKind.Array ||
             calls.GetArrayLength() == 0)

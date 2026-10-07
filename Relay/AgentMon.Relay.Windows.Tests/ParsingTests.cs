@@ -205,6 +205,75 @@ public sealed class ParsingTests
     }
 
     [TestMethod]
+    [DataRow("agentStop", 0)]
+    [DataRow("agentStop", 11)]
+    [DataRow("agentStop", 16)]
+    [DataRow("sessionEnd", 0)]
+    [DataRow("sessionEnd", 11)]
+    [DataRow("sessionEnd", 16)]
+    public void Activity_CompletedStopHookWithoutFusion_ReturnsReady(string hookType, int minutes)
+    {
+        var events = Encoding.UTF8.GetBytes("""
+            {"type":"user.message"}
+            {"type":"assistant.turn_start"}
+            {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"t","name":"run"}]}}}
+            {"type":"tool.execution_complete","data":{"toolCallId":"t"}}
+            {"type":"assistant.turn_end"}
+            {"type":"assistant.turn_start"}
+            {"type":"assistant.message"}
+            {"type":"assistant.turn_end"}
+            """ + "\n" + $$$"""
+            {"type":"hook.start","data":{"hookType":"{{{hookType}}}"}}
+            {"type":"hook.end","data":{"hookType":"{{{hookType}}}","success":true}}
+            {"type":"session.usage_checkpoint"}
+            """);
+        var updatedAt = TestDirectory.Now.AddMinutes(-minutes);
+        Assert.AreEqual("ready", EventTailReader.Activity(events, true, updatedAt, TestDirectory.Now));
+        Assert.AreEqual("offline", EventTailReader.Activity(events, false, updatedAt, TestDirectory.Now,
+            hasAvailableWorkspace: true));
+    }
+
+    [TestMethod]
+    [DataRow("agentStop")]
+    [DataRow("sessionEnd")]
+    public void Activity_StopHookRequiresSuccessfulCompletion(string hookType)
+    {
+        var events = """
+            {"type":"user.message"}
+            {"type":"model.turn_started"}
+            {"type":"assistant.turn_end"}
+            """ + "\n" + $$$"""
+            {"type":"hook.start","data":{"hookType":"{{{hookType}}}"}}
+            """;
+        Assert.AreEqual("working", Activity(events));
+        Assert.AreEqual("working", Activity(events + "\n" + $$$"""
+            {"type":"hook.end","data":{"hookType":"{{{hookType}}}","success":false}}
+            """));
+    }
+
+    [TestMethod]
+    [DataRow("agentStop")]
+    [DataRow("sessionEnd")]
+    public void Activity_NewerActivitySupersedesCompletedStopHook(string hookType)
+    {
+        var completed = $$$"""
+            {"type":"hook.end","data":{"hookType":"{{{hookType}}}","success":true}}
+            """;
+        foreach (var next in new[]
+                 {
+                     """{"type":"user.message"}""",
+                     """{"type":"model.turn_started"}""",
+                     """{"type":"assistant.turn_start"}""",
+                     """{"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"t","name":"run"}]}}}"""
+                 })
+            Assert.AreEqual("working", Activity(completed + "\n" + next));
+
+        const string question = """{"type":"tool.execution_start","data":{"toolCallId":"q","toolName":"ask_user"}}""";
+        Assert.AreEqual("ready", Activity(question + "\n" + completed));
+        Assert.AreEqual("attention", Activity(completed + "\n" + question));
+    }
+
+    [TestMethod]
     public void Activity_ActiveDescendantKeepsCompletedFusionWorking()
     {
         const string events = """
@@ -214,7 +283,7 @@ public sealed class ParsingTests
             {"type":"session.fusion_completed"}
             """;
         Assert.AreEqual("working", EventTailReader.Activity(
-            Encoding.UTF8.GetBytes(events), true, Now, Now, hasActiveDescendant: true));
+            Encoding.UTF8.GetBytes(events), true, TestDirectory.Now, TestDirectory.Now, hasActiveDescendant: true));
     }
 
     [TestMethod]
@@ -226,7 +295,7 @@ public sealed class ParsingTests
             {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"q","name":"ask_user"}]}}}
             """;
         Assert.AreEqual("attention", EventTailReader.Activity(
-            Encoding.UTF8.GetBytes(events), true, Now, Now, hasActiveDescendant: true));
+            Encoding.UTF8.GetBytes(events), true, TestDirectory.Now, TestDirectory.Now, hasActiveDescendant: true));
     }
 
     [TestMethod]

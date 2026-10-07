@@ -82,6 +82,11 @@ Unknown JSON fields must be ignored. Missing required fields must reject the sna
 
 Match AgentMon's local adapter behavior in `CopilotSessionMonitor.swift`: inspect only workspace metadata, process lock/PID state, and event **types** needed to derive activity. Do not transmit event content.
 
+Treat `session.fusion_completed` and successful `hook.end` events for `agentStop`
+or `sessionEnd` as turn-completion boundaries. An idle live session is `ready`
+immediately after completion, even if earlier tool events are still recent.
+Newer work or an unanswered question supersedes the completion boundary.
+
 Exclude sessions whose latest workspace or event update is more than 90 days
 old, regardless of activity or process liveness. Sessions exactly 90 days old
 remain eligible. This cutoff applies before prioritization and the 50-session

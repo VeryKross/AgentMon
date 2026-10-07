@@ -137,6 +137,11 @@ For local sessions, AgentMon reads workspace metadata and recent event types und
 
 This directory is an implementation detail of GitHub Copilot rather than a public API, so the reader is isolated in `CopilotSessionMonitor.swift`.
 
+A completed turn is recognized by `session.fusion_completed` or a successful
+`agentStop` or `sessionEnd` hook completion. An idle session becomes **READY**
+immediately even if its process remains open; earlier tool activity does not
+keep it **WORKING** until the inactivity timeout.
+
 Sessions with no workspace or event update for more than 90 days are excluded,
 including sessions that still appear to be waiting for input. The cutoff applies
 to both local sessions and Windows relay sessions; offline sessions retain their

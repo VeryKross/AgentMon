@@ -157,6 +157,7 @@ struct CopilotSessionMonitor {
       if type.hasPrefix("session.fusion_")
         || type.hasPrefix("model.")
         || type == "user.message"
+        || AgentEventParser.isTurnCompletion(type: type, payload: object["data"] as? [String: Any])
       {
         return true
       }
@@ -289,6 +290,16 @@ enum WorkspaceYAMLParser {
 }
 
 enum AgentEventParser {
+  static func isTurnCompletion(type: String, payload: [String: Any]?) -> Bool {
+    if type == "session.fusion_completed" { return true }
+    guard type == "hook.end",
+      let payload,
+      payload["success"] as? Bool == true,
+      let hookType = payload["hookType"] as? String
+    else { return false }
+    return hookType == "agentStop" || hookType == "sessionEnd"
+  }
+
   static func activity(
     from data: Data,
     hasLiveProcess: Bool,
@@ -308,7 +319,7 @@ enum AgentEventParser {
         let type = object["type"] as? String
       else { continue }
 
-      if type == "session.fusion_completed" {
+      if isTurnCompletion(type: type, payload: object["data"] as? [String: Any]) {
         guard hasLiveProcess else { return .offline }
         return hasActiveDescendant ? .working : .ready
       }
