@@ -197,9 +197,7 @@ final class DashboardModel: ObservableObject {
 
   private func mergeSessions() {
     let now = Date.now
-    let merged = (localSessions + remoteSessions)
-      .filter { $0.isWithinMaximumAge(now: now) }
-      .sorted(by: AgentSession.priorityOrdered)
+    let merged = AgentSession.merged(local: localSessions, remote: remoteSessions, now: now)
     completionTracker.update(with: merged)
     if completionFlashCounts != completionTracker.generations {
       completionFlashCounts = completionTracker.generations

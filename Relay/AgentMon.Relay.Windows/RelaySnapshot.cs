@@ -15,7 +15,9 @@ internal sealed record RelaySnapshot(
 {
     internal const int Version = 1;
     internal const int Port = 47831;
-    internal const string ApplicationVersion = "0.1.0";
+    internal static string ApplicationVersion { get; } =
+        (typeof(RelaySnapshot).Assembly.GetName().Version ??
+         throw new InvalidOperationException("Relay assembly version is missing.")).ToString(3);
 
     internal static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 

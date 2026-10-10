@@ -143,6 +143,22 @@ struct AgentSession: Identifiable, Equatable, Sendable {
     )
   }
 
+  var sourceLine: String {
+    let source = "\(host.platform.label) • \(host.name)"
+    guard let branch, !branch.isEmpty else { return source }
+    return "\(source) • \(branch)"
+  }
+
+  static func merged(
+    local: [AgentSession],
+    remote: [AgentSession],
+    now: Date
+  ) -> [AgentSession] {
+    (local + remote)
+      .filter { $0.isWithinMaximumAge(now: now) }
+      .sorted(by: priorityOrdered)
+  }
+
   func isWithinMaximumAge(now: Date) -> Bool {
     now.timeIntervalSince(updatedAt) <= 90 * 86_400
   }

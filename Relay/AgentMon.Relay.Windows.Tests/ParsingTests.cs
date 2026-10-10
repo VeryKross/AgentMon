@@ -157,6 +157,30 @@ public sealed class ParsingTests
     }
 
     [TestMethod]
+    public void Activity_BadCatAgentHookOnlyInputWaitAfterCompletedFusion_RemainsAttention()
+    {
+        const string events = """
+            {"type":"session.fusion_completed"}
+            {"type":"session.fusion_resolved"}
+            {"type":"hook.start","data":{"hookType":"userPromptSubmitted"}}
+            {"type":"hook.end","data":{"hookType":"userPromptSubmitted","success":true}}
+            {"type":"user.message"}
+            {"type":"system.message"}
+            {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"work","name":"powershell"}]}}}
+            {"type":"hook.end","data":{"hookType":"preToolUse","success":true}}
+            {"type":"hook.start","data":{"hookType":"postToolUse"}}
+            {"type":"hook.end","data":{"hookType":"postToolUse","success":true}}
+            {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"question","name":"ask_user"}]}}}
+            {"type":"hook.end","data":{"hookType":"preToolUse","success":true}}
+            """;
+        var bytes = Encoding.UTF8.GetBytes(events);
+        Assert.AreEqual("attention", EventTailReader.Activity(bytes, true,
+            TestDirectory.Now.AddHours(-1), TestDirectory.Now));
+        Assert.AreEqual("attention", EventTailReader.Activity(bytes, false,
+            TestDirectory.Now.AddHours(-1), TestDirectory.Now, hasAvailableWorkspace: true));
+    }
+
+    [TestMethod]
     public void Activity_NewerPreToolWorkSupersedesOldQuestionHook()
     {
         const string events = """

@@ -70,6 +70,8 @@ Do not install this certificate as a broadly trusted root.
 The Windows sessions appear alongside local Mac sessions, labeled with the
 Windows host and branch. **Stop relay** or **Quit** makes the Mac report
 `REMOTE OFFLINE` without affecting local sessions.
+Matching project names are not merged: each session keeps its own host,
+identity, and state. The dashboard shows MAC or PC alongside each project.
 If a worktree session has no repository in its workspace metadata, the relay
 uses Git's worktree pointer to show the parent project's name rather than the
 worktree branch as the project label. The session title remains on the next
@@ -147,6 +149,12 @@ process. If both the process and workspace are gone, the session is offline
 even if the question remains unanswered, and is excluded once its latest update
 is at least 24 hours old. Stale PID lock files alone do not keep abandoned
 questions in attention.
+
+A `preToolUse` hook containing `ask_user` also counts as an input wait, even
+before tool execution starts. Upgrade older relay builds to 0.2.5 or later
+for this handling; updating only the Mac app does not update the Windows
+parser. Snapshots report the running assembly version rather than a fixed
+protocol-era version.
 
 HTTPS responses contain only the protocol's host/session IDs, host display
 name, platform, project basename, workspace title (maximum 120 Unicode scalars),

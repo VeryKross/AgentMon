@@ -56,7 +56,7 @@ Response body:
 ## Field requirements
 
 - `protocolVersion`: integer, exactly `1`.
-- `relayVersion`: relay application version.
+- `relayVersion`: running relay assembly version, independent of `protocolVersion`.
 - `generatedAt`: current UTC RFC 3339 timestamp. Fractional seconds are allowed.
 - `host.id`: stable random UUID persisted by the relay; never derive it from a MAC address.
 - `host.name`: user-editable display name.
@@ -81,6 +81,10 @@ Unknown JSON fields must be ignored. Missing required fields must reject the sna
 - `offline`: the indexed session is recent but its process is no longer alive.
 
 Match AgentMon's local adapter behavior in `CopilotSessionMonitor.swift`: inspect only workspace metadata, process lock/PID state, and event **types** needed to derive activity. Do not transmit event content.
+
+An uncompleted `ask_user` call in a `preToolUse` hook counts as `attention` even
+before `tool.execution_start`. Session identity is host plus session ID: do not
+collapse sessions by project name or let one host's state replace another's.
 
 Treat `session.fusion_completed` and successful `hook.end` events for `agentStop`
 or `sessionEnd` as turn-completion boundaries. An idle live session is `ready`

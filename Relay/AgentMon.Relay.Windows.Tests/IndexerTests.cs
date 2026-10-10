@@ -8,6 +8,44 @@ namespace AgentMon.Relay.Windows.Tests;
 public sealed class IndexerTests
 {
     [TestMethod]
+    public void Snapshot_ReportsActualAssemblyVersion()
+    {
+        var expected = typeof(RelaySnapshot).Assembly.GetName().Version!.ToString(3);
+        Assert.AreEqual(expected, RelaySnapshot.ApplicationVersion);
+        using var temp = new TestDirectory();
+        var indexer = new SessionIndexer(temp.Root, temp.Log);
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        Assert.AreEqual(expected, indexer.Snapshot!.RelayVersion);
+    }
+
+    [TestMethod]
+    public void Scan_SameProjectSessionsRetainIndependentStates()
+    {
+        using var temp = new TestDirectory();
+        var waiting = temp.Session("waiting", """
+            {"type":"session.fusion_completed"}
+            {"type":"user.message"}
+            {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"q","name":"ask_user"}]}}}
+            {"type":"hook.end","data":{"hookType":"preToolUse","success":true}}
+            """, live: true, updatedAt: TestDirectory.Now.AddHours(-1));
+        var working = temp.Session("working", """{"type":"assistant.turn_start"}""", live: true);
+        var ready = temp.Session("ready", """{"type":"session.fusion_completed"}""", live: true);
+        foreach (var directory in new[] { waiting, working, ready })
+        {
+            var workspace = Path.Combine(directory, "workspace.yaml");
+            File.WriteAllText(workspace, File.ReadAllText(workspace).Replace("VeryKross/AgentMon", "VeryKross/BadCatAgent"));
+        }
+        var indexer = new SessionIndexer(temp.Root, temp.Log);
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        var sessions = indexer.Snapshot!.Sessions;
+        CollectionAssert.AreEqual(new[] { "attention", "working", "ready" },
+            sessions.Select(session => session.Activity).ToArray());
+        CollectionAssert.AreEqual(new[] { "waiting", "working", "ready" },
+            sessions.Select(session => session.Id).ToArray());
+        Assert.IsTrue(sessions.All(session => session.Project == "BadCatAgent"));
+    }
+
+    [TestMethod]
     public void Scan_MoreThan50Sessions_PrioritizesStateThenRecencyAndSkipsPendingAndOldOffline()
     {
         using var temp = new TestDirectory();

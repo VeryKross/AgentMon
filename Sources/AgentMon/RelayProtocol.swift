@@ -42,15 +42,14 @@ struct RelaySnapshot: Decodable, Sendable {
     let host = agentHost
     return sessions.map {
       AgentSession(
-        id: "\(host.id):\($0.id)",
+        id: $0.id,
         project: $0.project,
         task: $0.task,
         repository: $0.repository,
         branch: $0.branch,
         activity: $0.activity,
-        updatedAt: $0.updatedAt,
-        host: host
-      )
+        updatedAt: $0.updatedAt
+      ).assigning(host: host)
     }
   }
 }

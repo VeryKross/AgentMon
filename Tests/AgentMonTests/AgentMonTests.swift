@@ -565,6 +565,110 @@ func classifiesDormantQuestionByWorkspaceAvailability(age: TimeInterval) {
   #expect(sessions.map(\.id) == ["waiting-yesterday", "working-now", "ready-now"])
 }
 
+@Test func badCatAgentHookOnlyInputWaitAfterCompletedFusionRemainsAttention() {
+  let events = """
+    {"type":"session.fusion_completed"}
+    {"type":"session.fusion_resolved"}
+    {"type":"hook.start","data":{"hookType":"userPromptSubmitted"}}
+    {"type":"hook.end","data":{"hookType":"userPromptSubmitted","success":true}}
+    {"type":"user.message"}
+    {"type":"system.message"}
+    {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"work","name":"powershell"}]}}}
+    {"type":"hook.end","data":{"hookType":"preToolUse","success":true}}
+    {"type":"hook.start","data":{"hookType":"postToolUse"}}
+    {"type":"hook.end","data":{"hookType":"postToolUse","success":true}}
+    {"type":"hook.start","data":{"hookType":"preToolUse","input":{"toolCalls":[{"id":"question","name":"ask_user"}]}}}
+    {"type":"hook.end","data":{"hookType":"preToolUse","success":true}}
+    """
+  let now = Date.now
+  #expect(AgentEventParser.activity(
+    from: Data(events.utf8),
+    hasLiveProcess: true,
+    updatedAt: now.addingTimeInterval(-3_600),
+    now: now
+  ) == .attention)
+}
+
+@Test func sameProjectAcrossHostsKeepsEverySessionAndItsOwnState() {
+  let now = Date.now
+  let pc = AgentHost(id: "pc", name: "Windows Desktop", platform: .windows, isLocal: false)
+  let mac = AgentHost(id: "local", name: "Mac Mini", platform: .macOS, isLocal: true)
+  func session(_ id: String, _ activity: AgentActivity, host: AgentHost) -> AgentSession {
+    AgentSession(
+      id: id, project: "BadCatAgent", task: "Collaborative work",
+      repository: "VeryKross/BadCatAgent", branch: host.isLocal ? "mac-work" : "windows-work",
+      activity: activity, updatedAt: now
+    ).assigning(host: host)
+  }
+
+  let local = [session("shared-id", .working, host: mac), session("ready", .ready, host: mac)]
+  let remote = RelaySnapshot(
+    protocolVersion: 1, relayVersion: "0.2.5", generatedAt: now,
+    host: .init(id: pc.id, name: pc.name, platform: pc.platform),
+    sessions: [
+      .init(id: "shared-id", project: "BadCatAgent", task: "Collaborative work",
+        repository: "VeryKross/BadCatAgent", branch: "windows-work",
+        activity: .attention, updatedAt: now),
+      .init(id: "ready", project: "BadCatAgent", task: "Collaborative work",
+        repository: "VeryKross/BadCatAgent", branch: "windows-work",
+        activity: .offline, updatedAt: now),
+    ]
+  ).agentSessions()
+  let merged = AgentSession.merged(local: local, remote: remote, now: now)
+  #expect(merged.map(\.id) == ["pc:shared-id", "local:shared-id", "local:ready", "pc:ready"])
+  #expect(merged.map(\.activity) == [.attention, .working, .ready, .offline])
+  #expect(merged.allSatisfy { $0.project == "BadCatAgent" })
+  #expect(merged[0].sourceLine == "PC • Windows Desktop • windows-work")
+  #expect(merged[1].sourceLine == "MAC • Mac Mini • mac-work")
+
+  var tracker = SessionCompletionTracker()
+  tracker.update(with: merged)
+  let updated = AgentSession.merged(
+    local: [session("shared-id", .ready, host: mac), session("ready", .ready, host: mac)],
+    remote: remote, now: now
+  )
+  tracker.update(with: updated)
+  #expect(tracker.generations == ["local:shared-id": 1])
+  #expect(updated.first?.activity == .attention)
+}
+
+@Test @MainActor func rendersCollaborativeSessionRows() throws {
+  let pc = AgentHost(id: "pc", name: "Windows Desktop", platform: .windows, isLocal: false)
+  let model = DashboardModel()
+  let sessions = [
+    AgentSession(id: "waiting", project: "BadCatAgent", task: "Waiting for installation choices",
+      repository: "VeryKross/BadCatAgent", branch: "windows-work",
+      activity: .attention, updatedAt: .now, host: pc),
+    AgentSession(id: "working", project: "BadCatAgent", task: "Implementing the Mac companion",
+      repository: "VeryKross/BadCatAgent", branch: "mac-work",
+      activity: .working, updatedAt: .now),
+    AgentSession(id: "ready", project: "BadCatAgent", task: "Ready for the next assignment",
+      repository: "VeryKross/BadCatAgent", branch: nil,
+      activity: .ready, updatedAt: .now, host: pc),
+    AgentSession(id: "long", project: "A collaborative project with an unusually long name",
+      task: "Host and state should remain visible when the project name is truncated",
+      repository: nil, branch: "a-very-long-branch-name-with-additional-work-in-progress",
+      activity: .attention, updatedAt: .now, host: pc),
+  ]
+  let content = VStack(spacing: 0) {
+    ForEach(sessions) { session in
+      AgentRow(session: session)
+    }
+  }
+  .frame(width: 820, height: 416)
+  .background(RetroTheme.paper)
+  .environmentObject(model)
+  let renderer = ImageRenderer(content: content)
+  let image = try #require(renderer.nsImage)
+  #expect(image.size == NSSize(width: 820, height: 416))
+  if let outputPath = ProcessInfo.processInfo.environment["AGENTMON_SESSION_SNAPSHOT"] {
+    let tiff = try #require(image.tiffRepresentation)
+    let bitmap = try #require(NSBitmapImageRep(data: tiff))
+    let png = try #require(bitmap.representation(using: .png, properties: [:]))
+    try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+  }
+}
+
 @Test func excludesSessionsOver90DaysRegardlessOfActivityOrHost() {
   let now = Date(timeIntervalSince1970: 1_800_000_000)
   let remote = AgentHost(id: "windows", name: "Windows", platform: .windows, isLocal: false)

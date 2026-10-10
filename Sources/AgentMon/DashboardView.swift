@@ -307,7 +307,7 @@ private struct AgentTally: View {
   }
 }
 
-private struct AgentRow: View {
+struct AgentRow: View {
   @EnvironmentObject private var dashboard: DashboardModel
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   let session: AgentSession
@@ -323,6 +323,10 @@ private struct AgentRow: View {
             .font(RetroTheme.font(size: 18, weight: .bold))
             .lineLimit(1)
 
+          Text(session.host.platform.label)
+            .font(RetroTheme.font(size: 10, weight: .bold))
+            .fixedSize()
+
           Text(session.activity.title)
             .font(RetroTheme.font(size: 9, weight: .bold))
             .foregroundStyle(
@@ -336,6 +340,7 @@ private struct AgentRow: View {
             .overlay {
               Rectangle().stroke(RetroTheme.ink, lineWidth: 1)
             }
+            .fixedSize()
         }
 
         Text(session.task)
@@ -343,7 +348,7 @@ private struct AgentRow: View {
           .foregroundStyle(RetroTheme.muted)
           .lineLimit(1)
 
-        Text(hostLine)
+        Text(session.sourceLine)
           .font(RetroTheme.font(size: 10))
           .lineLimit(1)
       }
@@ -366,12 +371,10 @@ private struct AgentRow: View {
     } animation: { _ in
       .easeInOut(duration: 0.16)
     }
-  }
-
-  private var hostLine: String {
-    let host = "\(session.host.platform.label) • \(session.host.name)"
-    guard let branch = session.branch, !branch.isEmpty else { return host }
-    return "\(host) • \(branch)"
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(
+      "\(session.project), \(session.activity.title), \(session.sourceLine), \(session.task)"
+    )
   }
 }
 

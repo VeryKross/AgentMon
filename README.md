@@ -155,6 +155,17 @@ without an update, even if its retained history contains an unanswered question.
 Live and resumable sessions waiting for input remain visible despite inactivity,
 subject to the 90-day maximum age.
 
+An input wait can be recorded by a `preToolUse` hook containing `ask_user`,
+before a `tool.execution_start` event exists. Windows Relay 0.2.5 includes this
+handling and reports its actual assembly version in snapshots; older installed
+builds may miss these waits even when the Mac app is current.
+
+Sessions are indexed by host and session ID, never by project name. A shared
+project can therefore have separate **WORKING**, **NEEDS YOU**, and **READY**
+rows across Mac and PC. Each row shows its platform beside the project name,
+with the host name and branch below; completion flashes apply only to the
+session that finished.
+
 ## Build commands
 
 | Command | Result |
