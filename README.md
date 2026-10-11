@@ -142,6 +142,10 @@ A completed turn is recognized by `session.fusion_completed` or a successful
 immediately even if its process remains open; earlier tool activity does not
 keep it **WORKING** until the inactivity timeout.
 
+On the Mac, a still-running task process can keep a session **WORKING** after
+turn completion. Persistent computer-use and Copilot extension runtimes do not
+count as task processes; keeping these helpers open does not prevent **READY**.
+
 Sessions with no workspace or event update for more than 90 days are excluded,
 including sessions that still appear to be waiting for input. The cutoff applies
 to both local sessions and Windows relay sessions; offline sessions retain their

@@ -266,6 +266,57 @@ func newerActivitySupersedesCompletedStopHook(hookType: String) {
   #expect(ProcessTreeSnapshot.capture().hasActiveDescendant(of: getpid()))
 }
 
+@Test func completedSessionWithPersistentExtensionRuntimeIsReady() {
+  let tree = ProcessTreeSnapshot(entries: [
+    .init(pid: 20, parentPID: 10, command: "/plugins/computer-use/computer-use-mcp"),
+    .init(pid: 30, parentPID: 10, command: "/cache/cli/1.0.94-3/copilot extension_bootstrap.mjs"),
+  ])
+  #expect(!tree.hasActiveDescendant(of: 10))
+  let events = Data("""
+    {"type":"user.message"}
+    {"type":"assistant.turn_start"}
+    {"type":"assistant.turn_end"}
+    {"type":"session.fusion_completed"}
+    {"type":"session.usage_checkpoint"}
+    """.utf8)
+  #expect(AgentEventParser.activity(
+    from: events,
+    hasLiveProcess: true,
+    hasActiveDescendant: tree.hasActiveDescendant(of: 10),
+    updatedAt: .now,
+    now: .now
+  ) == .ready)
+  #expect(AgentEventParser.activity(
+    from: Data(),
+    hasLiveProcess: true,
+    hasActiveDescendant: tree.hasActiveDescendant(of: 10),
+    updatedAt: .now,
+    now: .now
+  ) == .ready)
+}
+
+@Test func extensionHelperDoesNotHideSeparateWorkOrSimilarCommands() {
+  let tree = ProcessTreeSnapshot(entries: [
+    .init(pid: 20, parentPID: 10, command: "/cache/copilot extension_bootstrap.mjs"),
+    .init(pid: 30, parentPID: 10, command: "/usr/bin/xcodebuild test"),
+    .init(pid: 50, parentPID: 40, command: "/cache/copilot --server --stdio"),
+    .init(pid: 70, parentPID: 60, command: "/bin/echo copilot extension_bootstrap.mjs"),
+    .init(pid: 90, parentPID: 80, command: "/cache/copilot some_other_script.mjs"),
+  ])
+  for pid: Int32 in [10, 40, 60, 80] {
+    #expect(tree.hasActiveDescendant(of: pid))
+  }
+}
+
+@Test func verifiesLiveSessionStatusWhenRequested() throws {
+  let environment = ProcessInfo.processInfo.environment
+  guard let id = environment["AGENTMON_TEST_SESSION_ID"],
+    let expected = environment["AGENTMON_TEST_SESSION_ACTIVITY"]
+  else { return }
+  let session = try #require(CopilotSessionMonitor().sessions().first { $0.id == id })
+  #expect(session.activity.rawValue == expected)
+}
+
 @Test func expandsEventTailPastHookTrafficToFindLifecycle() throws {
   let url = FileManager.default.temporaryDirectory
     .appendingPathComponent("agentmon-events-\(UUID().uuidString).jsonl")

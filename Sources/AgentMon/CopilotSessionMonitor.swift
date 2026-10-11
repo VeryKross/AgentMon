@@ -257,7 +257,11 @@ struct ProcessTreeSnapshot {
   }
 
   private static func isPersistentHelper(_ command: String) -> Bool {
-    command.contains("/computer-use-mcp")
+    if command.contains("/computer-use-mcp") { return true }
+    let arguments = command.split(whereSeparator: \.isWhitespace)
+    guard arguments.count == 2 else { return false }
+    return URL(fileURLWithPath: String(arguments[0])).lastPathComponent == "copilot"
+      && arguments[1] == "extension_bootstrap.mjs"
   }
 }
 
