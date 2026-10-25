@@ -231,6 +231,11 @@ private struct MenuBarPanel: View {
         NSApp.activate(ignoringOtherApps: true)
       }
 
+      Button("Mark All Seen") {
+        dashboard.acknowledgeAllCompletions()
+      }
+      .disabled(dashboard.unseenCompletions.isEmpty)
+
       Divider()
 
       Button("Quit AgentMon") {

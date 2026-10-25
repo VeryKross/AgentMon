@@ -1,24 +1,65 @@
+import AppKit
 import Darwin
 import Foundation
 
 @MainActor
 final class SystemMonitor {
   private var previousCPUTicks: [UInt64]?
+  private var cachedVolumes: [MountedVolume]?
+  private var volumeObservers: [NSObjectProtocol] = []
+
+  init() {
+    let center = NSWorkspace.shared.notificationCenter
+    volumeObservers = [
+      NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification,
+      NSWorkspace.didRenameVolumeNotification,
+    ].map { name in
+      center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.cachedVolumes = nil }
+      }
+    }
+  }
+
+  deinit {
+    let center = NSWorkspace.shared.notificationCenter
+    volumeObservers.forEach(center.removeObserver)
+  }
 
   func snapshot() -> SystemSnapshot {
     let memory = memoryUsage()
-    let disk = diskUsage()
 
     return SystemSnapshot(
       cpuPercent: cpuUsage(),
       memoryUsed: memory.used,
       memoryTotal: memory.total,
-      diskUsed: disk.used,
-      diskTotal: disk.total,
+      disks: selectedDisks(),
       uptime: ProcessInfo.processInfo.systemUptime,
       hostname: configuredComputerName,
       sampledAt: .now
     )
+  }
+
+  /// Lists volumes only when an external disk is selected, and reuses that list until a
+  /// volume mounts, unmounts, or is renamed, so slow network mounts are not re-queried
+  /// on every sample.
+  private func selectedDisks() -> [DiskSnapshot] {
+    let selections = Self.configuredDiskSelections()
+    guard selections.contains(where: { $0.volumeID != nil }) else {
+      return Self.disks(for: selections, volumes: [])
+    }
+    let volumes = cachedVolumes ?? MountedVolume.current()
+    cachedVolumes = volumes
+    return Self.disks(for: selections, volumes: volumes)
+  }
+
+  static func configuredDiskSelections(
+    defaults: UserDefaults = .standard
+  ) -> [DiskSelection] {
+    let first = defaults.string(forKey: SettingsKeys.firstDisk)
+      .flatMap(DiskSelection.init(rawValue:)) ?? SettingsKeys.defaultFirstDisk
+    let second = defaults.string(forKey: SettingsKeys.secondDisk)
+      .flatMap(DiskSelection.init(rawValue:)) ?? SettingsKeys.defaultSecondDisk
+    return [first, second]
   }
 
   private var configuredComputerName: String {
@@ -93,15 +134,75 @@ final class SystemMonitor {
     return (min(usedPages * pageSize, total), total)
   }
 
-  private func diskUsage() -> (used: Int64, total: Int64) {
-    do {
-      let values = try URL(fileURLWithPath: NSHomeDirectory())
-        .resourceValues(forKeys: [.volumeAvailableCapacityKey, .volumeTotalCapacityKey])
-      let total = Int64(values.volumeTotalCapacity ?? 0)
-      let available = Int64(values.volumeAvailableCapacity ?? 0)
-      return (max(total - available, 0), total)
-    } catch {
-      return (0, 0)
+  static func disks(
+    for selections: [DiskSelection],
+    volumes: [MountedVolume]
+  ) -> [DiskSnapshot] {
+    var seen = Set<String>()
+    return selections.compactMap { selection -> DiskSnapshot? in
+      let volume: MountedVolume?
+      let fallbackName: String
+      switch selection {
+      case .none:
+        return nil
+      case .startup:
+        volume = MountedVolume(
+          id: "startup", name: "Startup Disk",
+          url: URL(fileURLWithPath: NSHomeDirectory()), isStartup: true)
+        fallbackName = "Startup Disk"
+      case .volume(let id, let name):
+        volume = volumes.first { $0.id == id && !$0.isStartup }
+        fallbackName = name
+      }
+
+      let id = selection == .startup ? "startup" : (selection.volumeID ?? "")
+      guard seen.insert(id).inserted else { return nil }
+      guard let volume, let capacity = capacity(of: volume.url) else {
+        return .unmounted(id: id, name: fallbackName)
+      }
+      return DiskSnapshot(
+        id: id,
+        name: selection == .startup ? "Startup Disk" : volume.name,
+        used: capacity.used,
+        total: capacity.total,
+        isMounted: true
+      )
+    }
+  }
+
+  private static func capacity(of url: URL) -> (used: Int64, total: Int64)? {
+    guard
+      let values = try? url.resourceValues(forKeys: [
+        .volumeAvailableCapacityKey, .volumeTotalCapacityKey,
+      ]),
+      let total = values.volumeTotalCapacity, total > 0
+    else { return nil }
+    let available = Int64(values.volumeAvailableCapacity ?? 0)
+    return (max(Int64(total) - available, 0), Int64(total))
+  }
+}
+
+extension MountedVolume {
+  /// User-visible mounted volumes. The root volume is reported as the startup disk.
+  static func current(fileManager: FileManager = .default) -> [MountedVolume] {
+    let keys: [URLResourceKey] = [
+      .volumeNameKey, .volumeUUIDStringKey, .volumeIsRootFileSystemKey,
+    ]
+    let urls =
+      fileManager.mountedVolumeURLs(
+        includingResourceValuesForKeys: keys,
+        options: [.skipHiddenVolumes]
+      ) ?? []
+
+    return urls.compactMap { url in
+      guard let values = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
+      let isStartup = values.volumeIsRootFileSystem ?? (url.path == "/")
+      return MountedVolume(
+        id: values.volumeUUIDString ?? "path:\(url.path)",
+        name: values.volumeName ?? url.lastPathComponent,
+        url: url,
+        isStartup: isStartup
+      )
     }
   }
 }

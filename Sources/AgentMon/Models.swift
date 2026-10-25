@@ -4,8 +4,7 @@ struct SystemSnapshot: Equatable, Sendable {
   var cpuPercent: Double
   var memoryUsed: UInt64
   var memoryTotal: UInt64
-  var diskUsed: Int64
-  var diskTotal: Int64
+  var disks: [DiskSnapshot]
   var uptime: TimeInterval
   var hostname: String
   var sampledAt: Date
@@ -14,32 +13,98 @@ struct SystemSnapshot: Equatable, Sendable {
     cpuPercent: 0,
     memoryUsed: 0,
     memoryTotal: 1,
-    diskUsed: 0,
-    diskTotal: 1,
+    disks: [],
     uptime: 0,
     hostname: Host.current().localizedName ?? "This Macintosh",
     sampledAt: .now
   )
 
   var memoryPercent: Double {
-    percentage(numerator: Double(memoryUsed), denominator: Double(memoryTotal))
+    Self.percentage(numerator: Double(memoryUsed), denominator: Double(memoryTotal))
   }
 
-  var diskPercent: Double {
-    percentage(numerator: Double(diskUsed), denominator: Double(diskTotal))
+  var nearlyFullDisk: DiskSnapshot? {
+    disks.first { $0.isMounted && $0.percent >= 96 }
   }
 
   var healthMood: SystemHealthMood {
-    if cpuPercent >= 92 || memoryPercent >= 94 || diskPercent >= 96 {
+    if cpuPercent >= 92 || memoryPercent >= 94 || nearlyFullDisk != nil {
       return .concerned
     }
     return .happy
   }
 
-  private func percentage(numerator: Double, denominator: Double) -> Double {
+  var healthMessage: String {
+    if cpuPercent >= 92 { return "Processor is busy." }
+    if memoryPercent >= 94 { return "Memory is crowded." }
+    if let disk = nearlyFullDisk { return "\(disk.name) is nearly full." }
+    return "System shipshape."
+  }
+
+  static func percentage(numerator: Double, denominator: Double) -> Double {
     guard denominator > 0 else { return 0 }
     return min(max((numerator / denominator) * 100, 0), 100)
   }
+}
+
+struct DiskSnapshot: Identifiable, Equatable, Sendable {
+  let id: String
+  let name: String
+  let used: Int64
+  let total: Int64
+  let isMounted: Bool
+
+  var label: String { name.uppercased() }
+
+  var percent: Double {
+    SystemSnapshot.percentage(numerator: Double(used), denominator: Double(total))
+  }
+
+  static func unmounted(id: String, name: String) -> DiskSnapshot {
+    DiskSnapshot(id: id, name: name, used: 0, total: 0, isMounted: false)
+  }
+}
+
+/// A dashboard disk slot. Volumes are remembered by UUID with their last known name,
+/// so an unplugged drive still shows a labeled "not mounted" meter.
+enum DiskSelection: Hashable, Sendable, RawRepresentable {
+  case none
+  case startup
+  case volume(id: String, name: String)
+
+  init?(rawValue: String) {
+    switch rawValue {
+    case "none": self = .none
+    case "startup": self = .startup
+    default:
+      guard rawValue.hasPrefix("volume:") else { return nil }
+      let parts = rawValue.dropFirst("volume:".count)
+        .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+      guard let id = parts.first, !id.isEmpty else { return nil }
+      let name = parts.count > 1 ? String(parts[1]) : String(id)
+      self = .volume(id: String(id), name: name)
+    }
+  }
+
+  var rawValue: String {
+    switch self {
+    case .none: "none"
+    case .startup: "startup"
+    case .volume(let id, let name): "volume:\(id)\n\(name)"
+    }
+  }
+
+  var volumeID: String? {
+    if case .volume(let id, _) = self { return id }
+    return nil
+  }
+}
+
+struct MountedVolume: Identifiable, Equatable, Sendable {
+  let id: String
+  let name: String
+  let url: URL
+  let isStartup: Bool
 }
 
 enum SystemHealthMood: Sendable {
@@ -168,6 +233,23 @@ struct AgentSession: Identifiable, Equatable, Sendable {
       return lhs.activity.sortOrder < rhs.activity.sortOrder
     }
     return lhs.updatedAt > rhs.updatedAt
+  }
+
+  /// Priority order with finished-but-unseen sessions promoted directly below NEEDS YOU.
+  static func displayOrdered(
+    _ sessions: [AgentSession],
+    unseenCompletions: Set<String>
+  ) -> [AgentSession] {
+    func rank(_ session: AgentSession) -> Int {
+      if session.activity == .attention { return 0 }
+      if session.activity == .ready && unseenCompletions.contains(session.id) { return 1 }
+      return session.activity.sortOrder + 1
+    }
+    return sessions.sorted { lhs, rhs in
+      let left = rank(lhs)
+      let right = rank(rhs)
+      return left != right ? left < right : priorityOrdered(lhs, rhs)
+    }
   }
 }
 
@@ -408,6 +490,10 @@ enum SettingsKeys {
   static let relayEnabled = "relayEnabled"
   static let relayURL = "relayURL"
   static let relayFingerprint = "relayFingerprint"
+  static let firstDisk = "firstDisk"
+  static let secondDisk = "secondDisk"
+  static let defaultFirstDisk = DiskSelection.startup
+  static let defaultSecondDisk = DiskSelection.none
 }
 
 enum DisplayFormat {
@@ -441,6 +527,20 @@ enum DisplayFormat {
       return "\(hours)h \(minutes)m"
     }
     return "\(minutes)m"
+  }
+
+  static func duration(_ interval: TimeInterval) -> String {
+    let seconds = max(Int(interval), 0)
+    switch seconds {
+    case 0..<60: return "\(seconds)S"
+    case 60..<3_600: return "\(seconds / 60)M"
+    case 3_600..<86_400:
+      let minutes = (seconds % 3_600) / 60
+      return minutes == 0 ? "\(seconds / 3_600)H" : "\(seconds / 3_600)H \(minutes)M"
+    default:
+      let hours = (seconds % 86_400) / 3_600
+      return hours == 0 ? "\(seconds / 86_400)D" : "\(seconds / 86_400)D \(hours)H"
+    }
   }
 
   static func relativeTime(from date: Date, now: Date = .now) -> String {

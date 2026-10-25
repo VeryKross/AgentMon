@@ -55,6 +55,7 @@ struct DashboardView: View {
 }
 
 private struct DesktopMenuBar: View {
+  @EnvironmentObject private var dashboard: DashboardModel
   @Environment(\.openSettings) private var openSettings
 
   var body: some View {
@@ -68,6 +69,10 @@ private struct DesktopMenuBar: View {
             openSettings()
             NSApp.activate(ignoringOtherApps: true)
           }
+          Button("Mark All Seen") {
+            dashboard.acknowledgeAllCompletions()
+          }
+          .disabled(dashboard.unseenCompletions.isEmpty)
           Divider()
           Button("Quit AgentMon") {
             NSApplication.shared.terminate(nil)
@@ -121,11 +126,10 @@ private struct SystemMonitorWindow: View {
             .frame(width: 64, height: 77)
 
           VStack(alignment: .leading, spacing: 5) {
-            Text(
-              dashboard.system.healthMood == .happy
-                ? "System shipshape." : "Memory is crowded."
-            )
-            .font(RetroTheme.font(size: 17, weight: .bold))
+            Text(dashboard.system.healthMessage)
+              .font(RetroTheme.font(size: 17, weight: .bold))
+              .lineLimit(1)
+              .minimumScaleFactor(0.75)
             Text(dashboard.system.hostname)
               .font(RetroTheme.font(size: 13))
               .foregroundStyle(RetroTheme.muted)
@@ -157,30 +161,20 @@ private struct SystemMonitorWindow: View {
               "\(DisplayFormat.bytes(dashboard.system.memoryUsed)) / \(DisplayFormat.bytes(dashboard.system.memoryTotal))",
             history: dashboard.memoryHistory
           )
-          MetricBlock(
-            title: "STARTUP DISK",
-            value: dashboard.system.diskPercent,
-            detail:
-              "\(DisplayFormat.bytes(dashboard.system.diskUsed)) / \(DisplayFormat.bytes(dashboard.system.diskTotal))",
-            history: nil
-          )
+          ForEach(dashboard.system.disks) { disk in
+            MetricBlock(
+              title: disk.label,
+              value: disk.percent,
+              detail: disk.isMounted
+                ? "\(DisplayFormat.bytes(disk.used)) / \(DisplayFormat.bytes(disk.total))"
+                : "NOT MOUNTED",
+              history: nil
+            )
+          }
         }
         .padding(14)
 
         Spacer(minLength: 0)
-
-        HStack {
-          Text("AUTO-SAMPLING")
-          Spacer()
-          Text("EVERY 3 SEC")
-        }
-        .font(RetroTheme.font(size: 11, weight: .bold))
-        .padding(.horizontal, 14)
-        .frame(height: 38)
-        .background(DitherPattern(spacing: 5, dotSize: 1, background: RetroTheme.paper))
-        .overlay(alignment: .top) {
-          Rectangle().fill(RetroTheme.ink).frame(height: 1)
-        }
       }
     }
   }
@@ -197,9 +191,12 @@ private struct MetricBlock: View {
       HStack(alignment: .firstTextBaseline) {
         Text(title)
           .font(RetroTheme.font(size: 12, weight: .bold))
-        Spacer()
+          .lineLimit(1)
+          .truncationMode(.tail)
+        Spacer(minLength: 8)
         Text(detail)
           .font(RetroTheme.font(size: 12))
+          .fixedSize()
       }
 
       if let history {
@@ -225,19 +222,25 @@ private struct AgentDeskWindow: View {
           VStack(alignment: .leading, spacing: 4) {
             Text(dashboard.summaryLine)
               .font(RetroTheme.font(size: 24, weight: .bold))
-            Text("GITHUB COPILOT SESSIONS • \(dashboard.hostSummary)")
+              .lineLimit(1)
+              .minimumScaleFactor(0.7)
+            Text(
+              "COPILOT SESSIONS • \(dashboard.hostSummary) • \(dashboard.sessions.count) ON DESK"
+            )
               .font(RetroTheme.font(size: 11, weight: .bold))
               .foregroundStyle(RetroTheme.muted)
+              .lineLimit(1)
+              .minimumScaleFactor(0.8)
           }
 
           Spacer()
 
           AgentTally(label: "WORKING", count: dashboard.workingAgentCount)
-          AgentTally(
-            label: "READY", count: dashboard.sessions.filter { $0.activity == .ready }.count)
+          AgentTally(label: "DONE", count: dashboard.doneCount)
+          AgentTally(label: "READY", count: dashboard.readyCount)
         }
         .padding(.horizontal, 21)
-        .frame(height: 100)
+        .frame(height: 80)
 
         Rectangle().fill(RetroTheme.ink).frame(height: 2)
 
@@ -246,8 +249,8 @@ private struct AgentDeskWindow: View {
             .frame(width: 76, alignment: .leading)
           Text("PROJECT / ASSIGNMENT")
           Spacer()
-          Text("SEEN")
-            .frame(width: 54, alignment: .trailing)
+          Text("IN STATE")
+            .fixedSize()
         }
         .font(RetroTheme.font(size: 11, weight: .bold))
         .padding(.horizontal, 18)
@@ -273,17 +276,12 @@ private struct AgentDeskWindow: View {
           .scrollIndicators(.visible)
         }
 
-        HStack {
-          Text("NETWORK SESSION INDEX")
-          Spacer()
-          Text("\(dashboard.hostSummary) • \(dashboard.sessions.count) ON DESK")
-        }
-        .font(RetroTheme.font(size: 11, weight: .bold))
-        .padding(.horizontal, 16)
-        .frame(height: 40)
-        .overlay(alignment: .top) {
-          Rectangle().fill(RetroTheme.ink).frame(height: 2)
-        }
+        RecentEventLog(events: Array(dashboard.recentEvents.prefix(3)))
+          .frame(height: 66)
+          .clipped()
+          .overlay(alignment: .top) {
+            Rectangle().fill(RetroTheme.ink).frame(height: 2)
+          }
       }
     }
   }
@@ -300,7 +298,7 @@ private struct AgentTally: View {
       Text(label)
         .font(RetroTheme.font(size: 9, weight: .bold))
     }
-    .frame(width: 72, height: 66)
+    .frame(width: 72, height: 62)
     .overlay {
       Rectangle().stroke(RetroTheme.ink, lineWidth: 2)
     }
@@ -312,9 +310,48 @@ struct AgentRow: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   let session: AgentSession
 
+  private var isDone: Bool { dashboard.isUnseenCompletion(session) }
+  private var stateTitle: String { isDone ? "DONE" : session.activity.title }
+
   var body: some View {
+    TimelineView(.periodic(from: .now, by: 15)) { timeline in
+      rowContent(now: timeline.date)
+    }
+    .padding(.horizontal, 17)
+    .frame(height: 104)
+    .overlay(alignment: .leading) {
+      if isDone {
+        Rectangle().fill(RetroTheme.ink).frame(width: 7)
+      }
+    }
+    .phaseAnimator(
+      [false, true, false, true, false],
+      trigger: reduceMotion ? nil : dashboard.completionFlashCounts[session.id]
+    ) { row, highlighted in
+      row.background(
+        RetroTheme.ink.opacity(highlighted ? 0.18 : (session.activity == .attention ? 0.08 : 0))
+      )
+    } animation: { _ in
+      .easeInOut(duration: 0.16)
+    }
+    .contentShape(Rectangle())
+    .onTapGesture {
+      if isDone {
+        dashboard.acknowledgeCompletion(of: session.id)
+      }
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(
+      "\(session.project), \(stateTitle), \(stateDurationDescription(now: .now)), \(session.sourceLine), \(session.task)"
+    )
+    .accessibilityAction(named: "Mark as seen") {
+      dashboard.acknowledgeCompletion(of: session.id)
+    }
+  }
+
+  private func rowContent(now: Date) -> some View {
     HStack(spacing: 16) {
-      StatusGlyph(activity: session.activity)
+      StatusGlyph(activity: session.activity, emphasized: isDone)
         .frame(width: 66)
 
       VStack(alignment: .leading, spacing: 5) {
@@ -327,7 +364,7 @@ struct AgentRow: View {
             .font(RetroTheme.font(size: 10, weight: .bold))
             .fixedSize()
 
-          Text(session.activity.title)
+          Text(stateTitle)
             .font(RetroTheme.font(size: 9, weight: .bold))
             .foregroundStyle(
               session.activity == .attention ? RetroTheme.paper : RetroTheme.ink
@@ -338,7 +375,7 @@ struct AgentRow: View {
               session.activity == .attention ? RetroTheme.ink : RetroTheme.paper
             )
             .overlay {
-              Rectangle().stroke(RetroTheme.ink, lineWidth: 1)
+              Rectangle().stroke(RetroTheme.ink, lineWidth: isDone ? 2 : 1)
             }
             .fixedSize()
         }
@@ -355,25 +392,66 @@ struct AgentRow: View {
 
       Spacer(minLength: 8)
 
-      Text(DisplayFormat.relativeTime(from: session.updatedAt))
+      Text(DisplayFormat.relativeTime(from: dashboard.stateSince(for: session), now: now))
         .font(RetroTheme.font(size: 12, weight: .bold))
-        .frame(width: 48, alignment: .trailing)
+        .frame(width: 66, alignment: .trailing)
     }
-    .padding(.horizontal, 17)
-    .frame(height: 104)
-    .phaseAnimator(
-      [false, true, false, true, false],
-      trigger: reduceMotion ? nil : dashboard.completionFlashCounts[session.id]
-    ) { row, highlighted in
-      row.background(
-        RetroTheme.ink.opacity(highlighted ? 0.18 : (session.activity == .attention ? 0.08 : 0))
-      )
-    } animation: { _ in
-      .easeInOut(duration: 0.16)
+  }
+
+  private func stateDurationDescription(now: Date) -> String {
+    let since = dashboard.stateSince(for: session)
+    return "for \(DisplayFormat.duration(now.timeIntervalSince(since)).lowercased())"
+  }
+}
+
+private struct RecentEventLog: View {
+  let events: [SessionActivityEvent]
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 12) {
+      Text("RECENT")
+        .font(RetroTheme.font(size: 9, weight: .bold))
+        .foregroundStyle(RetroTheme.paper)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 3)
+        .background(RetroTheme.ink)
+        .fixedSize()
+
+      VStack(alignment: .leading, spacing: 2) {
+        if events.isEmpty {
+          Text("No changes since AgentMon opened.")
+            .foregroundStyle(RetroTheme.muted)
+        } else {
+          ForEach(events) { event in
+            HStack(spacing: 10) {
+              Text(event.date.formatted(.dateTime.hour().minute()))
+                .fixedSize()
+                .frame(width: 70, alignment: .leading)
+              Text("\(event.project) • \(event.platform.label)")
+                .font(RetroTheme.font(size: 11, weight: .bold))
+                .lineLimit(1)
+              Text(event.message)
+                .lineLimit(1)
+                .layoutPriority(1)
+              Spacer(minLength: 0)
+            }
+            .frame(height: 16)
+          }
+        }
+      }
+      .font(RetroTheme.font(size: 11))
+
+      Spacer(minLength: 0)
     }
-    .accessibilityElement(children: .ignore)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 6)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .background(DitherPattern(spacing: 5, dotSize: 1, background: RetroTheme.paper))
+    .accessibilityElement(children: .combine)
     .accessibilityLabel(
-      "\(session.project), \(session.activity.title), \(session.sourceLine), \(session.task)"
+      events.isEmpty
+        ? "Recent: no changes"
+        : "Recent: " + events.map { "\($0.project) \($0.message)" }.joined(separator: "; ")
     )
   }
 }

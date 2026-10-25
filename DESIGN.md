@@ -104,7 +104,7 @@ The palette simulates dark ink on a softly aged monochrome CRT, with no ornament
 
 The canonical canvas is exactly 1280×720. A 34px desktop menu strip sits above a two-column workspace: a 376px system rail and an 850px Agent Desk separated by 18px. The system rail stacks a 452px health window and a 190px weather window. On other window sizes, scale the complete canvas proportionally instead of reflowing its topology.
 
-Agent Desk is the focal field and accommodates four 104px session rows before summarizing overflow in its footer. System health and weather are supporting instruments. Dashboard typography renders at 150% of the original scale for legibility on the physically small display.
+Agent Desk is the focal field and accommodates four 104px session rows, scrolling beyond that. Its header carries WORKING, DONE, and READY tallies; its footer is a three-line RECENT log of state changes on a stipple field. System health and weather are supporting instruments. Dashboard typography renders at 150% of the original scale for legibility on the physically small display.
 
 ## Elevation & Depth
 
@@ -156,7 +156,7 @@ Every instrument is a fixed window with striped title chrome, centered title, cl
 
 ### Network Session Row
 
-Every agent row ends with a compact source line: platform label, human-readable host name, and branch. MAC and PC labels make source identity glanceable without introducing color. Global priority still determines row order, so a remote session needing attention rises above routine local work.
+Every agent row ends with a compact source line: platform label, human-readable host name, and branch. MAC and PC labels make source identity glanceable without introducing color. Global priority still determines row order, so a remote session needing attention rises above routine local work. A finished-but-unseen session ranks just below attention and is marked without color: a DONE stamp with a heavier rule, a heavier glyph frame, and a solid ink bar on the row's leading edge. The trailing column shows time in the current state.
 
 ### Weather Artwork
 

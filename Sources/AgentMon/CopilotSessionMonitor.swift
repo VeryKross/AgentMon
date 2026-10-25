@@ -47,10 +47,20 @@ struct CopilotSessionMonitor {
     let updatedAt = max(eventDate, workspaceDate)
     let livePID = liveSessionPID(in: directory)
     let hasLiveProcess = livePID != nil
+    let events = Self.tail(of: eventsURL)
+    // Copilot can host several sessions and their MCP servers in one runtime process, so only
+    // a child started during this session's latest turn counts as that session's work.
+    let turn = AgentEventParser.latestTurnInterval(from: events, now: now)
+    let hasActiveDescendant =
+      if let livePID, let turn {
+        processTree.hasActiveDescendant(of: livePID, startedDuring: turn)
+      } else {
+        false
+      }
     let activity = AgentEventParser.activity(
-      from: Self.tail(of: eventsURL),
+      from: events,
       hasLiveProcess: hasLiveProcess,
-      hasActiveDescendant: livePID.map(processTree.hasActiveDescendant(of:)) ?? false,
+      hasActiveDescendant: hasActiveDescendant,
       updatedAt: updatedAt,
       now: now,
       hasAvailableWorkspace: Self.hasAvailableWorkspace(from: fields)
@@ -203,6 +213,7 @@ struct ProcessTreeSnapshot {
     let pid: Int32
     let parentPID: Int32
     let command: String
+    var startedAt: Date? = nil
   }
 
   private let childrenByParent: [Int32: [Entry]]
@@ -240,18 +251,39 @@ struct ProcessTreeSnapshot {
         let pid = Int32(fields[0]),
         let parentPID = Int32(fields[1])
       else { return nil }
-      return Entry(pid: pid, parentPID: parentPID, command: String(fields[2]))
+      return Entry(
+        pid: pid, parentPID: parentPID, command: String(fields[2]), startedAt: startDate(of: pid))
     }
     return ProcessTreeSnapshot(entries: entries)
   }
 
-  func hasActiveDescendant(of rootPID: Int32) -> Bool {
+  private static func startDate(of pid: Int32) -> Date? {
+    var info = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.stride)
+    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+    return Date(
+      timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec)
+        + TimeInterval(info.pbi_start_tvusec) / 1_000_000)
+  }
+
+  /// Whether any descendant of `rootPID`, outside persistent helpers' subtrees, is a task.
+  /// When `interval` is given, only tasks started within it count; MCP servers launch before
+  /// a session's first prompt, and other sessions sharing the runtime start their tools at
+  /// other times. Older processes are still searched, so a command started this turn inside
+  /// a long-lived shell is found.
+  func hasActiveDescendant(of rootPID: Int32, startedDuring interval: DateInterval? = nil)
+    -> Bool
+  {
     var pending = childrenByParent[rootPID] ?? []
-    var visited = Set<Int32>()
+    var visited: Set<Int32> = [rootPID]
 
     while let process = pending.popLast() {
-      guard visited.insert(process.pid).inserted else { continue }
-      guard Self.isPersistentHelper(process.command) else { return true }
+      guard visited.insert(process.pid).inserted,
+        !Self.isPersistentHelper(process.command)
+      else { continue }
+      guard let interval else { return true }
+      if process.startedAt.map(interval.contains) == true { return true }
+      pending.append(contentsOf: childrenByParent[process.pid] ?? [])
     }
     return false
   }
@@ -294,6 +326,33 @@ enum WorkspaceYAMLParser {
 }
 
 enum AgentEventParser {
+  /// The span from the latest user prompt to its turn completion (or `now` if still running),
+  /// widened slightly because process and event clocks are sampled separately.
+  static func latestTurnInterval(from data: Data, now: Date) -> DateInterval? {
+    var completion: Date?
+    for line in data.split(separator: 0x0A).reversed() {
+      guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+        let type = object["type"] as? String
+      else { continue }
+      let timestamp = (object["timestamp"] as? String).flatMap(parseTimestamp)
+      if type == "user.message" {
+        guard let start = timestamp else { return nil }
+        let end = max(completion ?? now, start)
+        return DateInterval(start: start.addingTimeInterval(-0.5), end: end.addingTimeInterval(1))
+      }
+      if completion == nil, isTurnCompletion(type: type, payload: object["data"] as? [String: Any]) {
+        completion = timestamp
+      }
+    }
+    return nil
+  }
+
+  private static func parseTimestamp(_ value: String) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+  }
+
   static func isTurnCompletion(type: String, payload: [String: Any]?) -> Bool {
     if type == "session.fusion_completed" { return true }
     guard type == "hook.end",

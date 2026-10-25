@@ -185,13 +185,14 @@ struct MiniMacIcon: View {
 
 struct StatusGlyph: View {
   let activity: AgentActivity
+  var emphasized = false
 
   var body: some View {
     ZStack {
       Rectangle()
         .fill(activity == .attention ? RetroTheme.ink : RetroTheme.paper)
         .overlay {
-          Rectangle().stroke(RetroTheme.ink, lineWidth: 2)
+          Rectangle().stroke(RetroTheme.ink, lineWidth: emphasized ? 4 : 2)
         }
 
       glyph

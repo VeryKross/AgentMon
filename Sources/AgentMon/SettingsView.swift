@@ -10,6 +10,9 @@ struct SettingsView: View {
   @AppStorage(SettingsKeys.relayURL) private var relayURL =
     "https://windows-desktop.local:\(RelayProtocol.defaultPort)"
   @AppStorage(SettingsKeys.relayFingerprint) private var relayFingerprint = ""
+  @AppStorage(SettingsKeys.firstDisk) private var firstDisk = SettingsKeys.defaultFirstDisk
+  @AppStorage(SettingsKeys.secondDisk) private var secondDisk = SettingsKeys.defaultSecondDisk
+  @State private var mountedVolumes = MountedVolume.current()
   @State private var relayToken: String
   @State private var relaySaveError: String?
 
@@ -26,6 +29,20 @@ struct SettingsView: View {
         Text("If only one display is connected, AgentMon opens as a normal window.")
           .font(.caption)
           .foregroundStyle(.secondary)
+      }
+
+      Section("Disks") {
+        diskPicker("First disk", selection: $firstDisk)
+        diskPicker("Second disk", selection: $secondDisk)
+        HStack {
+          Text("Choose any two mounted volumes, or None to hide a slot.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          Spacer()
+          Button("Refresh Volumes") {
+            mountedVolumes = MountedVolume.current()
+          }
+        }
       }
 
       Section("Weather") {
@@ -83,10 +100,45 @@ struct SettingsView: View {
     }
     .formStyle(.grouped)
     .padding(12)
-    .frame(width: 520, height: 610)
+    .frame(width: 520, height: 720)
     .onSubmit {
       dashboard.refresh(forceWeather: true)
     }
+    .onAppear {
+      mountedVolumes = MountedVolume.current()
+    }
+    .onChange(of: firstDisk) { dashboard.refresh() }
+    .onChange(of: secondDisk) { dashboard.refresh() }
+  }
+
+  private func diskPicker(_ title: String, selection: Binding<DiskSelection>) -> some View {
+    Picker(title, selection: selection) {
+      ForEach(
+        Self.diskOptions(current: selection.wrappedValue, volumes: mountedVolumes), id: \.0
+      ) { option in
+        Text(option.1).tag(option.0)
+      }
+    }
+  }
+
+  static func diskOptions(
+    current: DiskSelection,
+    volumes: [MountedVolume]
+  ) -> [(DiskSelection, String)] {
+    var options: [(DiskSelection, String)] = [(.none, "None"), (.startup, "Startup Disk")]
+    var currentIsListed = current == .none || current == .startup
+    for volume in volumes where !volume.isStartup {
+      if current.volumeID == volume.id {
+        options.append((current, volume.name))
+        currentIsListed = true
+      } else {
+        options.append((.volume(id: volume.id, name: volume.name), volume.name))
+      }
+    }
+    if !currentIsListed, case .volume(_, let name) = current {
+      options.append((current, "\(name) (not mounted)"))
+    }
+    return options
   }
 
   private func saveRelay() {

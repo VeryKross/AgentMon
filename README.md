@@ -21,11 +21,14 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 
 ## Highlights
 
-- **Live Mac health:** processor load, memory use, startup-disk use, and uptime
+- **Live Mac health:** processor load, memory use, uptime, and capacity for up to two chosen disks (for example the startup disk and an external project drive)
 - **Copilot session desk:** active and recent GitHub Copilot project sessions, repositories, branches, and activity
 - **Quiet status motion:** working-session watch hands tick while active; a completed turn briefly flashes its session row when it becomes ready (both honor Reduce Motion)
 - **Cross-computer view:** merges sessions from a securely paired Windows relay into one prioritized Agent Desk
 - **Attention state:** visually inverts a session when Copilot is waiting for an answer
+- **Finished, not yet seen:** a session that completes a turn is stamped **DONE** and sorts just below sessions needing you until you click its row or choose **Mark All Seen**
+- **Time in state:** each row shows how long the session has been working, waiting, ready, or asleep
+- **Recent log:** the Agent Desk footer lists the latest state changes, such as "finished after 17M"
 - **Local weather:** keyless temperature data from [Open-Meteo](https://open-meteo.com/) with fresh U.S. sky observations from the [National Weather Service](https://www.weather.gov/), defaulting to Marietta, Georgia 30066
 - **Glanceable weather artwork:** distinct MacPaint-style scenes for sky coverage, day and night, fog, drizzle, rain, snow, and thunderstorms
 - **Dedicated-display mode:** automatically fills the first secondary display at its native resolution
@@ -99,6 +102,7 @@ Click **AgentMon** in the dashboard's retro menu strip and choose **Settings…*
 - The computer name shown in the system window
 - Whether AgentMon fills the secondary display automatically
 - The town, city, or ZIP code used for weather
+- Up to two disks to show in the system window. Choose **Startup Disk**, any mounted volume, or **None** for each slot. An external disk you select stays configured while unplugged and shows **NOT MOUNTED**
 
 The menu-bar item can also return AgentMon to a normal resizable window.
 
@@ -135,6 +139,16 @@ For local sessions, AgentMon reads workspace metadata and recent event types und
 | **READY** | The session is open and idle |
 | **ASLEEP** | The session process is no longer active |
 
+AgentMon also marks a session **DONE** when it goes from **WORKING** to
+**READY** while the dashboard is open. **DONE** is a display state: it clears
+when you click the row, choose **Mark All Seen** from the AgentMon or menu-bar
+menu, or the session changes state again.
+
+The **IN STATE** column measures time since AgentMon saw the session's last
+state change. A session that is already running when AgentMon opens starts
+from its most recent recorded activity. The **RECENT** footer keeps the latest
+state changes from this run of the app; nothing is written to disk.
+
 This directory is an implementation detail of GitHub Copilot rather than a public API, so the reader is isolated in `CopilotSessionMonitor.swift`.
 
 A completed turn is recognized by `session.fusion_completed` or a successful
@@ -143,8 +157,11 @@ immediately even if its process remains open; earlier tool activity does not
 keep it **WORKING** until the inactivity timeout.
 
 On the Mac, a still-running task process can keep a session **WORKING** after
-turn completion. Persistent computer-use and Copilot extension runtimes do not
-count as task processes; keeping these helpers open does not prevent **READY**.
+turn completion. Only a process started during that session's latest turn
+counts. Copilot can host several sessions in one runtime, so MCP servers
+(launched before the first prompt) and commands from other sessions do not keep
+a finished session **WORKING**. Persistent computer-use and Copilot extension
+runtimes are also ignored.
 
 Sessions with no workspace or event update for more than 90 days are excluded,
 including sessions that still appear to be waiting for input. The cutoff applies

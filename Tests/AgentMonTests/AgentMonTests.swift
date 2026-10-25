@@ -308,6 +308,89 @@ func newerActivitySupersedesCompletedStopHook(hookType: String) {
   }
 }
 
+@Test func findsLatestTurnIntervalFromPromptToCompletion() throws {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  let completed = Data("""
+    {"type":"user.message","timestamp":"2026-10-25T17:00:00.000Z"}
+    {"type":"hook.end","data":{"hookType":"agentStop","success":true},"timestamp":"2026-10-25T17:05:00.000Z"}
+    {"type":"user.message","timestamp":"2026-10-25T17:17:12.560Z"}
+    {"type":"assistant.turn_end"}
+    {"type":"hook.end","data":{"hookType":"agentStop","success":true},"timestamp":"2026-10-25T17:17:18.193Z"}
+    {"type":"session.usage_checkpoint","timestamp":"2026-10-25T17:17:20.000Z"}
+    """.utf8)
+  let interval = try #require(AgentEventParser.latestTurnInterval(from: completed, now: now))
+  let formatter = ISO8601DateFormatter()
+  formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+  let prompt = try #require(formatter.date(from: "2026-10-25T17:17:12.560Z"))
+  let stop = try #require(formatter.date(from: "2026-10-25T17:17:18.193Z"))
+  #expect(interval.contains(prompt.addingTimeInterval(1)))
+  #expect(!interval.contains(prompt.addingTimeInterval(-2)))
+  #expect(!interval.contains(stop.addingTimeInterval(60)))
+
+  let running = Data("""
+    {"type":"user.message","timestamp":"2026-10-25T17:17:12Z"}
+    {"type":"assistant.turn_start"}
+    """.utf8)
+  #expect(AgentEventParser.latestTurnInterval(from: running, now: stop.addingTimeInterval(600))?
+    .contains(stop.addingTimeInterval(300)) == true)
+  #expect(AgentEventParser.latestTurnInterval(from: Data(#"{"type":"assistant.turn_end"}"#.utf8), now: now) == nil)
+}
+
+@Test func sharedRuntimeCountsOnlyChildrenStartedDuringTheSessionsTurn() {
+  let sessionLoaded = Date(timeIntervalSince1970: 1_800_000_000)
+  let turn = DateInterval(start: sessionLoaded.addingTimeInterval(2), duration: 6)
+  let tree = ProcessTreeSnapshot(entries: [
+    .init(pid: 20, parentPID: 10, command: "npm exec scholar-sidekick-mcp@0.8.8", startedAt: sessionLoaded),
+    .init(pid: 21, parentPID: 10, command: "/usr/bin/swift build", startedAt: sessionLoaded.addingTimeInterval(600)),
+    .init(pid: 22, parentPID: 10, command: "/bin/bash -c make", startedAt: nil),
+  ])
+  #expect(!tree.hasActiveDescendant(of: 10, startedDuring: turn))
+  #expect(tree.hasActiveDescendant(of: 10))
+
+  let busy = ProcessTreeSnapshot(entries: [
+    .init(pid: 20, parentPID: 10, command: "npm exec scholar-sidekick-mcp@0.8.8", startedAt: sessionLoaded),
+    .init(pid: 23, parentPID: 10, command: "/usr/bin/xcodebuild test", startedAt: turn.start.addingTimeInterval(3)),
+  ])
+  #expect(busy.hasActiveDescendant(of: 10, startedDuring: turn))
+}
+
+@Test func turnFilterSearchesGrandchildrenButNotHelperSubtrees() {
+  let loaded = Date(timeIntervalSince1970: 1_800_000_000)
+  let turn = DateInterval(start: loaded.addingTimeInterval(60), duration: 30)
+  let duringTurn = turn.start.addingTimeInterval(5)
+  let tree = ProcessTreeSnapshot(entries: [
+    .init(pid: 20, parentPID: 10, command: "/bin/zsh -i", startedAt: loaded),
+    .init(pid: 30, parentPID: 20, command: "/usr/bin/swift test", startedAt: duringTurn),
+    .init(pid: 40, parentPID: 11, command: "npm exec scholar-sidekick-mcp", startedAt: loaded),
+    .init(pid: 50, parentPID: 40, command: "node server.js", startedAt: loaded),
+    .init(pid: 60, parentPID: 12, command: "/plugins/computer-use/computer-use-mcp", startedAt: loaded),
+    .init(pid: 70, parentPID: 60, command: "/plugins/helper-child", startedAt: duringTurn),
+    .init(pid: 80, parentPID: 13, command: "/bin/zsh -i", startedAt: loaded),
+    .init(pid: 81, parentPID: 80, command: "/bin/sleep 9", startedAt: nil),
+  ])
+  #expect(tree.hasActiveDescendant(of: 10, startedDuring: turn))
+  #expect(!tree.hasActiveDescendant(of: 11, startedDuring: turn))
+  #expect(!tree.hasActiveDescendant(of: 12, startedDuring: turn))
+  #expect(!tree.hasActiveDescendant(of: 13, startedDuring: turn))
+}
+
+@Test func processTreeCaptureRecordsChildStartTime() throws {
+  let before = Date.now.addingTimeInterval(-1)
+  let child = Process()
+  child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+  child.arguments = ["5"]
+  try child.run()
+  defer {
+    if child.isRunning { child.terminate() }
+    child.waitUntilExit()
+  }
+  let window = DateInterval(start: before, end: .now.addingTimeInterval(1))
+  #expect(ProcessTreeSnapshot.capture().hasActiveDescendant(of: getpid(), startedDuring: window))
+  #expect(
+    !ProcessTreeSnapshot.capture().hasActiveDescendant(
+      of: getpid(), startedDuring: DateInterval(start: before.addingTimeInterval(-60), duration: 30)))
+}
+
 @Test func verifiesLiveSessionStatusWhenRequested() throws {
   let environment = ProcessInfo.processInfo.environment
   guard let id = environment["AGENTMON_TEST_SESSION_ID"],
@@ -672,7 +755,7 @@ func classifiesDormantQuestionByWorkspaceAvailability(age: TimeInterval) {
   #expect(merged[0].sourceLine == "PC • Windows Desktop • windows-work")
   #expect(merged[1].sourceLine == "MAC • Mac Mini • mac-work")
 
-  var tracker = SessionCompletionTracker()
+  var tracker = SessionActivityTracker()
   tracker.update(with: merged)
   let updated = AgentSession.merged(
     local: [session("shared-id", .ready, host: mac), session("ready", .ready, host: mac)],
@@ -760,7 +843,7 @@ func classifiesDormantQuestionByWorkspaceAvailability(age: TimeInterval) {
 }
 
 @Test func flashesOnlyWhenAnExistingWorkingSessionBecomesReady() {
-  var tracker = SessionCompletionTracker()
+  var tracker = SessionActivityTracker()
 
   func session(_ id: String, _ activity: AgentActivity) -> AgentSession {
     AgentSession(
@@ -793,6 +876,245 @@ func classifiesDormantQuestionByWorkspaceAvailability(age: TimeInterval) {
   tracker.update(with: [])
   tracker.update(with: [session("b", .ready)])
   #expect(tracker.generations.isEmpty)
+}
+
+private func trackedSession(
+  _ id: String, _ activity: AgentActivity, updatedAt: Date, project: String = "AgentMon"
+) -> AgentSession {
+  AgentSession(
+    id: id, project: project, task: "Work", repository: nil, branch: nil,
+    activity: activity, updatedAt: updatedAt)
+}
+
+@Test func tracksTimeInCurrentStateFromFirstSightingAndTransitions() {
+  let start = Date(timeIntervalSince1970: 1_800_000_000)
+  var tracker = SessionActivityTracker()
+
+  tracker.update(
+    with: [trackedSession("a", .ready, updatedAt: start.addingTimeInterval(-600))], now: start)
+  #expect(tracker.stateSince["a"] == start.addingTimeInterval(-600))
+
+  let later = start.addingTimeInterval(30)
+  tracker.update(with: [trackedSession("a", .ready, updatedAt: later)], now: later)
+  #expect(tracker.stateSince["a"] == start.addingTimeInterval(-600))
+
+  let working = start.addingTimeInterval(60)
+  tracker.update(with: [trackedSession("a", .working, updatedAt: working)], now: working)
+  #expect(tracker.stateSince["a"] == working)
+
+  let future = start.addingTimeInterval(9_999)
+  tracker.update(with: [trackedSession("b", .ready, updatedAt: future)], now: working)
+  #expect(tracker.stateSince["b"] == working)
+}
+
+@Test func marksFinishedSessionsUnseenUntilAcknowledgedOrActiveAgain() {
+  let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+  var tracker = SessionActivityTracker()
+
+  tracker.update(with: [trackedSession("a", .working, updatedAt: t0), trackedSession("b", .ready, updatedAt: t0)], now: t0)
+  #expect(tracker.unseenCompletions.isEmpty)
+
+  let t1 = t0.addingTimeInterval(1_020)
+  tracker.update(with: [trackedSession("a", .ready, updatedAt: t1), trackedSession("b", .ready, updatedAt: t1)], now: t1)
+  #expect(tracker.unseenCompletions == ["a"])
+
+  tracker.acknowledge("a")
+  #expect(tracker.unseenCompletions.isEmpty)
+
+  tracker.update(with: [trackedSession("a", .working, updatedAt: t1)], now: t1.addingTimeInterval(3))
+  tracker.update(with: [trackedSession("a", .ready, updatedAt: t1)], now: t1.addingTimeInterval(6))
+  #expect(tracker.unseenCompletions == ["a"])
+  tracker.update(with: [trackedSession("a", .working, updatedAt: t1)], now: t1.addingTimeInterval(9))
+  #expect(tracker.unseenCompletions.isEmpty)
+
+  tracker.update(with: [trackedSession("a", .ready, updatedAt: t1)], now: t1.addingTimeInterval(12))
+  tracker.acknowledgeAll()
+  #expect(tracker.unseenCompletions.isEmpty)
+}
+
+@Test func keepsHistoryThroughBriefAbsenceButForgetsAfterRetention() {
+  let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+  var tracker = SessionActivityTracker()
+  tracker.update(with: [trackedSession("a", .working, updatedAt: t0)], now: t0)
+  tracker.update(with: [trackedSession("a", .ready, updatedAt: t0)], now: t0.addingTimeInterval(60))
+  let finishedAt = t0.addingTimeInterval(60)
+
+  tracker.update(with: [], now: t0.addingTimeInterval(120))
+  #expect(tracker.unseenCompletions == ["a"])
+  tracker.update(with: [trackedSession("a", .ready, updatedAt: t0)], now: t0.addingTimeInterval(180))
+  #expect(tracker.unseenCompletions == ["a"])
+  #expect(tracker.stateSince["a"] == finishedAt)
+
+  let gone = t0.addingTimeInterval(180 + SessionActivityTracker.retention)
+  tracker.update(with: [], now: gone)
+  #expect(tracker.unseenCompletions.isEmpty)
+  #expect(tracker.stateSince["a"] == nil)
+}
+
+@Test func logsStateChangesNewestFirstWithBoundedHistory() {
+  let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+  var tracker = SessionActivityTracker()
+  tracker.update(with: [trackedSession("a", .working, updatedAt: t0, project: "Frontend")], now: t0)
+  #expect(tracker.events.isEmpty)
+
+  let steps: [(TimeInterval, AgentActivity)] = [
+    (1_020, .ready), (1_100, .attention), (1_200, .working), (1_300, .offline), (1_400, .ready),
+    (1_500, .working),
+  ]
+  for (offset, activity) in steps {
+    tracker.update(
+      with: [trackedSession("a", activity, updatedAt: t0, project: "Frontend")],
+      now: t0.addingTimeInterval(offset))
+  }
+  #expect(
+    tracker.events.map(\.message) == [
+      "started working", "is ready", "went to sleep", "resumed working", "needs you",
+      "finished after 17M",
+    ])
+  #expect(tracker.events.first?.date == t0.addingTimeInterval(1_500))
+  #expect(tracker.events.allSatisfy { $0.project == "Frontend" && $0.platform == .macOS })
+
+  for index in 0..<40 {
+    tracker.update(
+      with: [trackedSession("a", index.isMultiple(of: 2) ? .ready : .working, updatedAt: t0)],
+      now: t0.addingTimeInterval(2_000 + Double(index)))
+  }
+  #expect(tracker.events.count == SessionActivityTracker.eventLimit)
+  #expect(Set(tracker.events.map(\.id)).count == SessionActivityTracker.eventLimit)
+}
+
+@Test func ordersUnseenCompletionsDirectlyBelowAttention() {
+  let now = Date.now
+  let sessions = [
+    trackedSession("ready", .ready, updatedAt: now),
+    trackedSession("working", .working, updatedAt: now),
+    trackedSession("done", .ready, updatedAt: now.addingTimeInterval(-600)),
+    trackedSession("asleep", .offline, updatedAt: now),
+    trackedSession("waiting", .attention, updatedAt: now),
+  ]
+  let ordered = AgentSession.displayOrdered(sessions, unseenCompletions: ["done"])
+  #expect(ordered.map(\.id) == ["waiting", "done", "working", "ready", "asleep"])
+  #expect(
+    AgentSession.displayOrdered(sessions, unseenCompletions: []).map(\.id)
+      == ["waiting", "working", "ready", "done", "asleep"])
+}
+
+@Test func formatsDurations() {
+  #expect(DisplayFormat.duration(-5) == "0S")
+  #expect(DisplayFormat.duration(45) == "45S")
+  #expect(DisplayFormat.duration(17 * 60 + 40) == "17M")
+  #expect(DisplayFormat.duration(3_600) == "1H")
+  #expect(DisplayFormat.duration(3_900) == "1H 5M")
+  #expect(DisplayFormat.duration(2 * 86_400 + 3 * 3_600) == "2D 3H")
+}
+
+@Test @MainActor func roundTripsDiskSelections() {
+  for selection in [
+    DiskSelection.none, .startup, .volume(id: "E47CE629-334B", name: "Project Disk"),
+  ] {
+    #expect(DiskSelection(rawValue: selection.rawValue) == selection)
+  }
+  #expect(DiskSelection(rawValue: "volume:") == nil)
+  #expect(DiskSelection(rawValue: "garbage") == nil)
+  #expect(DiskSelection(rawValue: "volume:abc") == .volume(id: "abc", name: "abc"))
+
+  let defaults = try! #require(UserDefaults(suiteName: "AgentMonTests.disks.\(UUID())"))
+  #expect(SystemMonitor.configuredDiskSelections(defaults: defaults) == [.startup, .none])
+  defaults.set("none", forKey: SettingsKeys.firstDisk)
+  defaults.set(DiskSelection.volume(id: "x", name: "Project Disk").rawValue, forKey: SettingsKeys.secondDisk)
+  #expect(
+    SystemMonitor.configuredDiskSelections(defaults: defaults)
+      == [.none, .volume(id: "x", name: "Project Disk")])
+}
+
+@Test @MainActor func samplesSelectedDisksAndReportsMissingVolumes() throws {
+  let directory = FileManager.default.temporaryDirectory
+  let volumes = [
+    MountedVolume(id: "project-uuid", name: "Project Disk", url: directory, isStartup: false),
+    MountedVolume(id: "root-uuid", name: "Macintosh HD", url: URL(fileURLWithPath: "/"), isStartup: true),
+  ]
+
+  let disks = SystemMonitor.disks(
+    for: [.startup, .volume(id: "project-uuid", name: "Old Name")], volumes: volumes)
+  #expect(disks.map(\.label) == ["STARTUP DISK", "PROJECT DISK"])
+  #expect(disks.allSatisfy { $0.isMounted && $0.total > 0 && $0.used <= $0.total })
+
+  let unplugged = SystemMonitor.disks(
+    for: [.none, .volume(id: "gone", name: "Archive")], volumes: volumes)
+  #expect(unplugged == [.unmounted(id: "gone", name: "Archive")])
+
+  #expect(SystemMonitor.disks(for: [.none, .none], volumes: volumes).isEmpty)
+  #expect(SystemMonitor.disks(for: [.startup, .startup], volumes: volumes).count == 1)
+  #expect(
+    SystemMonitor.disks(for: [.volume(id: "root-uuid", name: "Macintosh HD")], volumes: volumes)
+      == [.unmounted(id: "root-uuid", name: "Macintosh HD")])
+}
+
+@Test func listsDiskOptionsIncludingUnmountedSelection() {
+  let volumes = [
+    MountedVolume(id: "root", name: "Macintosh HD", url: URL(fileURLWithPath: "/"), isStartup: true),
+    MountedVolume(id: "p", name: "Project Disk", url: URL(fileURLWithPath: "/Volumes/Project Disk"), isStartup: false),
+  ]
+  #expect(
+    SettingsView.diskOptions(current: .startup, volumes: volumes).map(\.1)
+      == ["None", "Startup Disk", "Project Disk"])
+  let renamed = DiskSelection.volume(id: "p", name: "Old Name")
+  #expect(SettingsView.diskOptions(current: renamed, volumes: volumes).map(\.0).contains(renamed))
+  #expect(
+    SettingsView.diskOptions(current: .volume(id: "gone", name: "Archive"), volumes: volumes)
+      .last?.1 == "Archive (not mounted)")
+}
+
+@Test func reportsWhichResourceIsUnhealthy() {
+  func snapshot(cpu: Double = 10, memory: UInt64 = 10, disks: [DiskSnapshot] = []) -> SystemSnapshot {
+    SystemSnapshot(
+      cpuPercent: cpu, memoryUsed: memory, memoryTotal: 100, disks: disks, uptime: 0,
+      hostname: "Mac", sampledAt: .now)
+  }
+  let full = DiskSnapshot(id: "p", name: "Project Disk", used: 97, total: 100, isMounted: true)
+  #expect(snapshot().healthMessage == "System shipshape.")
+  #expect(snapshot().healthMood == .happy)
+  #expect(snapshot(cpu: 95).healthMessage == "Processor is busy.")
+  #expect(snapshot(memory: 95).healthMessage == "Memory is crowded.")
+  #expect(snapshot(disks: [full]).healthMessage == "Project Disk is nearly full.")
+  #expect(snapshot(disks: [full]).healthMood == .concerned)
+  #expect(snapshot(disks: [.unmounted(id: "p", name: "Project Disk")]).healthMood == .happy)
+}
+
+@Test @MainActor func rendersDemoDashboard() throws {
+  let model = DashboardModel()
+  model.loadDemoData()
+  #expect(model.doneCount == 1)
+  #expect(model.sessions.first?.activity == .attention)
+  #expect(model.recentEvents.first?.message == "started working")
+  #expect(model.recentEvents.contains { $0.message == "finished after 27M" })
+
+  let content = DashboardView()
+    .environmentObject(model)
+    .frame(width: 1280, height: 720)
+  let renderer = ImageRenderer(content: content)
+  renderer.proposedSize = ProposedViewSize(width: 1280, height: 720)
+  let image = try #require(renderer.nsImage)
+  #expect(image.size == NSSize(width: 1280, height: 720))
+  guard let outputPath = ProcessInfo.processInfo.environment["AGENTMON_DASHBOARD_SNAPSHOT"] else {
+    return
+  }
+  // ImageRenderer leaves ScrollView content blank, so render the desk rows separately too.
+  let rows = VStack(spacing: 0) {
+    ForEach(model.sessions) { AgentRow(session: $0) }
+  }
+  .environmentObject(model)
+  .frame(width: 822)
+  .background(RetroTheme.paper)
+  for (view, path) in [
+    (AnyView(content), outputPath), (AnyView(rows), outputPath + "-rows.png"),
+  ] {
+    let renderer = ImageRenderer(content: view)
+    let tiff = try #require(renderer.nsImage?.tiffRepresentation)
+    let bitmap = try #require(NSBitmapImageRep(data: tiff))
+    let png = try #require(bitmap.representation(using: .png, properties: [:]))
+    try png.write(to: URL(fileURLWithPath: path), options: .atomic)
+  }
 }
 
 @Test func mapsWeatherCodes() {
