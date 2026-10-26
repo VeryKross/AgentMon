@@ -58,6 +58,9 @@ internal sealed class SessionIndexer(string root, SafeLog log, Func<int, bool>? 
                     tail = EventTailReader.Read(eventsPath);
                     events.Add(eventsPath);
                 }
+                // The Copilot app pre-creates probe and prewarm sessions that never record an event.
+                if (tail.Length == 0)
+                    continue;
                 var updatedAt = workspaceDate > eventDate ? workspaceDate : eventDate;
                 if (now - updatedAt > TimeSpan.FromDays(90))
                     continue;

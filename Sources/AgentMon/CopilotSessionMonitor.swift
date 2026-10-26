@@ -3,10 +3,10 @@ import Foundation
 
 struct CopilotSessionMonitor {
   private let fileManager = FileManager.default
+  var root = FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent(".copilot/session-state", isDirectory: true)
 
   func sessions(now: Date = .now) -> [AgentSession] {
-    let root = fileManager.homeDirectoryForCurrentUser
-      .appendingPathComponent(".copilot/session-state", isDirectory: true)
     let processTree = ProcessTreeSnapshot.capture()
 
     guard
@@ -42,6 +42,11 @@ struct CopilotSessionMonitor {
     guard let id = fields["id"] else { return nil }
 
     let eventsURL = directory.appendingPathComponent("events.jsonl")
+    // The Copilot app pre-creates probe and prewarm sessions that never record an event.
+    guard
+      let eventSize = try? eventsURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+      eventSize > 0
+    else { return nil }
     let eventDate = modificationDate(for: eventsURL)
     let workspaceDate = parseDate(fields["updated_at"]) ?? modificationDate(for: workspaceURL)
     let updatedAt = max(eventDate, workspaceDate)

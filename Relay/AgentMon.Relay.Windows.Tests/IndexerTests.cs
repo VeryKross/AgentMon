@@ -113,6 +113,21 @@ public sealed class IndexerTests
     }
 
     [TestMethod]
+    public void Scan_SessionsWithoutEvents_AreNotActivity()
+    {
+        using var temp = new TestDirectory();
+        temp.Session("prewarmed", events: "", live: true);
+        var probe = temp.Session("probe");
+        File.Delete(Path.Combine(probe, "events.jsonl"));
+        temp.Session("started");
+        var indexer = new SessionIndexer(temp.Root, temp.Log);
+
+        Assert.IsTrue(indexer.Scan(TestDirectory.Host, TestDirectory.Now));
+        CollectionAssert.AreEqual(new[] { "started" },
+            indexer.Snapshot!.Sessions.Select(session => session.Id).ToArray());
+    }
+
+    [TestMethod]
     public void Scan_SessionCrossesAgeCutoff_RemovesItUntilNewActivity()
     {
         using var temp = new TestDirectory();

@@ -163,6 +163,10 @@ counts. Copilot can host several sessions in one runtime, so MCP servers
 a finished session **WORKING**. Persistent computer-use and Copilot extension
 runtimes are also ignored.
 
+Sessions without any recorded events are excluded on both Mac and Windows: the
+Copilot app periodically pre-creates probe and prewarm sessions that contain only
+`workspace.yaml`, and their fresh timestamps are not activity.
+
 Sessions with no workspace or event update for more than 90 days are excluded,
 including sessions that still appear to be waiting for input. The cutoff applies
 to both local sessions and Windows relay sessions; offline sessions retain their

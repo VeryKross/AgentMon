@@ -391,6 +391,30 @@ func newerActivitySupersedesCompletedStopHook(hookType: String) {
       of: getpid(), startedDuring: DateInterval(start: before.addingTimeInterval(-60), duration: 30)))
 }
 
+@Test func ignoresSessionsWithoutEvents() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent("AgentMonTests-\(UUID().uuidString)", isDirectory: true)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let now = Date()
+  func session(_ id: String, events: String?) throws {
+    let directory = root.appendingPathComponent(id, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try "id: \(id)\ncwd: /tmp\nupdated_at: \(ISO8601DateFormatter().string(from: now))\n"
+      .write(to: directory.appendingPathComponent("workspace.yaml"), atomically: true, encoding: .utf8)
+    if let events {
+      try events.write(
+        to: directory.appendingPathComponent("events.jsonl"), atomically: true, encoding: .utf8)
+    }
+  }
+  try session("probe", events: nil)
+  try session("prewarmed", events: "")
+  try session("started", events: #"{"type":"session.start"}"#)
+
+  let sessions = CopilotSessionMonitor(root: root).sessions(now: now)
+
+  #expect(sessions.map(\.id) == ["started"])
+}
+
 @Test func verifiesLiveSessionStatusWhenRequested() throws {
   let environment = ProcessInfo.processInfo.environment
   guard let id = environment["AGENTMON_TEST_SESSION_ID"],

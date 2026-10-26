@@ -133,8 +133,9 @@ The relay reads `%USERPROFILE%\.copilot\session-state` every three seconds:
   tool-call IDs are used to derive state. Partial JSON lines are ignored.
 - `inuse.<pid>.lock` entries, with an actual process-liveness check.
 
-`pending-session*`, hidden directories, and directory reparse points are
-excluded. Only attention, working, ready, and recent offline sessions are
+`pending-session*`, hidden directories, directory reparse points, and sessions
+whose `events.jsonl` is missing or empty (Copilot app probe/prewarm sessions) are
+excluded; relay builds before 0.2.6 reported those as fresh ASLEEP sessions. Only attention, working, ready, and recent offline sessions are
 returned, ordered by that priority and then recency, capped at 50. Offline
 sessions older than 24 hours are excluded. All sessions whose latest workspace
 or event update is more than 90 days old are excluded, even if a process appears
