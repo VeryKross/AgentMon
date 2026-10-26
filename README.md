@@ -24,9 +24,9 @@ AgentMon turns a dedicated 1280×720 display into an always-on, glanceable view 
 - **Live Mac health:** processor load, memory use, uptime, and capacity for up to two chosen disks (for example the startup disk and an external project drive)
 - **Copilot session desk:** active and recent GitHub Copilot project sessions, repositories, branches, and activity
 - **Quiet status motion:** working-session watch hands tick while active; a completed turn briefly flashes its session row when it becomes ready (both honor Reduce Motion)
-- **Cross-computer view:** merges sessions from a securely paired Windows relay into one prioritized Agent Desk
+- **Cross-computer view:** merges sessions from a securely paired Windows relay into one Agent Desk
 - **Attention state:** visually inverts a session when Copilot is waiting for an answer
-- **Finished, not yet seen:** a session that completes a turn is stamped **DONE** and sorts just below sessions needing you until you click its row or choose **Mark All Seen**
+- **Finished, not yet seen:** a session that completes a turn is stamped **DONE** until you click its row or choose **Mark All Seen**
 - **Time in state:** each row shows how long the session has been working, waiting, ready, or asleep
 - **Recent log:** the Agent Desk footer lists the latest state changes, such as "finished after 17M"
 - **Local weather:** keyless temperature data from [Open-Meteo](https://open-meteo.com/) with fresh U.S. sky observations from the [National Weather Service](https://www.weather.gov/), defaulting to Marietta, Georgia 30066
@@ -97,7 +97,7 @@ Use `make demo` to run the sanitized sample state used for repository screenshot
 
 ## Configuration
 
-Click **AgentMon** in the dashboard's retro menu strip and choose **Settings…**. The native macOS menu-bar extra provides the same settings and window controls when it is visible.
+Click **AgentMon** in the dashboard's retro menu strip and choose **Settings…**. The native macOS menu-bar extra, shown as a small AgentMon Mac with a stopwatch, provides the same settings and window controls when it is visible.
 
 - The computer name shown in the system window
 - Whether AgentMon fills the secondary display automatically
@@ -206,6 +206,7 @@ session that finished.
 ```text
 Sources/AgentMon/
 ├── AgentMonApp.swift          # Window, menu-bar, and display lifecycle
+├── MenuBarIcon.swift          # Template menu-bar version of the app icon
 ├── DashboardModel.swift       # Refresh cadence and presentation state
 ├── DashboardView.swift        # 1280×720 Macintosh Mission Control UI
 ├── SystemMonitor.swift        # Native CPU, memory, disk, and uptime metrics

@@ -196,21 +196,24 @@ final class DashboardModel: ObservableObject {
       return
     }
 
-    guard let configuration = RelayConfiguration.load() else {
-      remoteSessions = []
-      remoteHost = nil
-      relayState = .unavailable(message: "Complete the Windows relay pairing settings.")
-      mergeSessions()
-      return
-    }
-
     let isDue = Date().timeIntervalSince(lastRelayRefresh) >= 3
     guard relayTask == nil, force || isDue else { return }
 
     lastRelayRefresh = .now
-    relayState = .connecting
     relayTask = Task { [weak self] in
-      guard let self else { return }
+      // Keychain reads can block on an access prompt, so keep them off the main thread.
+      let token = await RelayKeychain.cachedToken()
+      guard let self, !Task.isCancelled else { return }
+      guard let configuration = RelayConfiguration.load(token: token) else {
+        remoteSessions = []
+        remoteHost = nil
+        relayState = .unavailable(message: "Complete the Windows relay pairing settings.")
+        mergeSessions()
+        relayTask = nil
+        return
+      }
+
+      relayState = .connecting
       do {
         let snapshot = try await relayClient.fetchSnapshot(configuration: configuration)
         guard !Task.isCancelled else { return }
@@ -231,8 +234,7 @@ final class DashboardModel: ObservableObject {
   private func mergeSessions(now: Date = .now) {
     let merged = AgentSession.merged(local: localSessions, remote: remoteSessions, now: now)
     activityTracker.update(with: merged, now: now)
-    let unseen = activityTracker.unseenCompletions
-    sessions = AgentSession.displayOrdered(merged, unseenCompletions: unseen)
+    sessions = merged
     publishTracker()
   }
 
@@ -248,7 +250,6 @@ final class DashboardModel: ObservableObject {
     }
     if unseenCompletions != activityTracker.unseenCompletions {
       unseenCompletions = activityTracker.unseenCompletions
-      sessions = AgentSession.displayOrdered(sessions, unseenCompletions: unseenCompletions)
     }
   }
 

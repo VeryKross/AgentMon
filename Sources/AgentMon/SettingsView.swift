@@ -13,12 +13,8 @@ struct SettingsView: View {
   @AppStorage(SettingsKeys.firstDisk) private var firstDisk = SettingsKeys.defaultFirstDisk
   @AppStorage(SettingsKeys.secondDisk) private var secondDisk = SettingsKeys.defaultSecondDisk
   @State private var mountedVolumes = MountedVolume.current()
-  @State private var relayToken: String
+  @State private var relayToken = ""
   @State private var relaySaveError: String?
-
-  init() {
-    _relayToken = State(initialValue: (try? RelayKeychain.loadToken()) ?? "")
-  }
 
   var body: some View {
     Form {
@@ -106,6 +102,12 @@ struct SettingsView: View {
     }
     .onAppear {
       mountedVolumes = MountedVolume.current()
+    }
+    .task {
+      let token = await RelayKeychain.cachedToken()
+      if relayToken.isEmpty {
+        relayToken = token
+      }
     }
     .onChange(of: firstDisk) { dashboard.refresh() }
     .onChange(of: secondDisk) { dashboard.refresh() }

@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Security
+import os
 
 enum RelayClientError: LocalizedError {
   case invalidConfiguration(String)
@@ -28,12 +29,10 @@ struct RelayConfiguration: Equatable, Sendable {
   let certificateFingerprint: String
   let token: String
 
-  static func load() -> RelayConfiguration? {
-    let defaults = UserDefaults.standard
+  static func load(token: String, defaults: UserDefaults = .standard) -> RelayConfiguration? {
     guard defaults.bool(forKey: SettingsKeys.relayEnabled),
       let rawURL = defaults.string(forKey: SettingsKeys.relayURL),
       let url = URL(string: rawURL),
-      let token = try? RelayKeychain.loadToken(),
       !token.isEmpty
     else {
       return nil
@@ -174,6 +173,19 @@ final class PinnedRelayDelegate: NSObject, URLSessionDelegate {
 enum RelayKeychain {
   private static let service = "com.verykross.AgentMon.relay"
   private static let account = "primary"
+  private static let tokenCache = OSAllocatedUnfairLock<String?>(initialState: nil)
+
+  /// Returns the pairing token, reading Keychain off the main thread only until a read succeeds.
+  static func cachedToken() async -> String {
+    if let token = tokenCache.withLock({ $0 }) {
+      return token
+    }
+    guard let token = await Task.detached(operation: { try? loadToken() }).value else {
+      return ""
+    }
+    tokenCache.withLock { $0 = token }
+    return token
+  }
 
   static func saveToken(_ token: String) throws {
     let base: [CFString: Any] = [
@@ -192,6 +204,7 @@ enum RelayKeychain {
         "Could not save the pairing token in Keychain (error \(status))."
       )
     }
+    tokenCache.withLock { $0 = token }
   }
 
   static func loadToken() throws -> String {

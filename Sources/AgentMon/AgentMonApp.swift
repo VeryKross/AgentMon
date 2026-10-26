@@ -26,9 +26,11 @@ struct AgentMonApp: App {
       CommandGroup(replacing: .newItem) {}
     }
 
-    MenuBarExtra("AgentMon", systemImage: "display") {
+    MenuBarExtra {
       MenuBarPanel()
         .environmentObject(dashboard)
+    } label: {
+      MenuBarLabel()
     }
     .menuBarExtraStyle(.window)
 
@@ -47,21 +49,28 @@ struct AgentMonApp: App {
 private struct DashboardWindowAccessor: NSViewRepresentable {
   let onWindowAvailable: (NSWindow) -> Void
 
-  func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    DispatchQueue.main.async {
-      if let window = view.window {
-        onWindowAvailable(window)
-      }
-    }
+  func makeNSView(context: Context) -> WindowObservingView {
+    let view = WindowObservingView()
+    view.onWindowAvailable = onWindowAvailable
     return view
   }
 
-  func updateNSView(_ nsView: NSView, context: Context) {
-    DispatchQueue.main.async {
-      if let window = nsView.window {
-        onWindowAvailable(window)
-      }
+  func updateNSView(_ nsView: WindowObservingView, context: Context) {
+    nsView.onWindowAvailable = onWindowAvailable
+    if let window = nsView.window {
+      DispatchQueue.main.async { onWindowAvailable(window) }
+    }
+  }
+}
+
+/// Reports its window as soon as AppKit attaches it, rather than polling after an async hop.
+final class WindowObservingView: NSView {
+  var onWindowAvailable: ((NSWindow) -> Void)?
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    if let window {
+      onWindowAvailable?(window)
     }
   }
 }
@@ -89,6 +98,16 @@ final class DashboardWindowController {
     else { return }
 
     fill(window, on: targetScreen)
+
+    // SwiftUI may restore its autosaved frame after the window first appears; fill again once it settles.
+    for delay in [0.5, 1.5] {
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak window, weak self] in
+        guard let window, let self, let screen = self.secondaryScreen(),
+          window.frame != screen.frame
+        else { return }
+        self.fill(window, on: screen)
+      }
+    }
   }
 
   func fillSecondaryDisplay() {
@@ -125,30 +144,45 @@ final class DashboardWindowController {
   }
 
   private func secondaryScreen() -> NSScreen? {
-    let screens = NSScreen.screens
-    guard screens.count > 1 else { return nil }
-    return screens.first(where: { $0 != NSScreen.main }) ?? screens.last
+    Self.secondary(of: NSScreen.screens)
+  }
+
+  /// The first screen is the one with the menu bar; `NSScreen.main` follows the key window instead,
+  /// which points at the dashboard's own display once it has focus.
+  nonisolated static func secondary<Screen>(of screens: [Screen]) -> Screen? {
+    screens.dropFirst().first
+  }
+}
+
+private struct MenuBarLabel: View {
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some View {
+    Image(nsImage: MenuBarIcon.image)
+      .accessibilityLabel("AgentMon")
+      .task {
+        // The dashboard owns refresh, so make sure it exists even if window restoration skipped it.
+        try? await Task.sleep(for: .seconds(2))
+        if !NSApp.windows.contains(where: { $0.title == "AgentMon" }) {
+          openWindow(id: "dashboard")
+        }
+      }
   }
 }
 
 private struct SettingsWindowAccessor: NSViewRepresentable {
   let onWindowAvailable: (NSWindow) -> Void
 
-  func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    DispatchQueue.main.async {
-      if let window = view.window {
-        onWindowAvailable(window)
-      }
-    }
+  func makeNSView(context: Context) -> WindowObservingView {
+    let view = WindowObservingView()
+    view.onWindowAvailable = onWindowAvailable
     return view
   }
 
-  func updateNSView(_ nsView: NSView, context: Context) {
-    DispatchQueue.main.async {
-      if let window = nsView.window {
-        onWindowAvailable(window)
-      }
+  func updateNSView(_ nsView: WindowObservingView, context: Context) {
+    nsView.onWindowAvailable = onWindowAvailable
+    if let window = nsView.window {
+      DispatchQueue.main.async { onWindowAvailable(window) }
     }
   }
 }

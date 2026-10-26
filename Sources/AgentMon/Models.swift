@@ -127,14 +127,6 @@ enum AgentActivity: String, Codable, Sendable {
     }
   }
 
-  var sortOrder: Int {
-    switch self {
-    case .attention: 0
-    case .working: 1
-    case .ready: 2
-    case .offline: 3
-    }
-  }
 }
 
 enum AgentHostPlatform: String, Codable, Sendable {
@@ -228,28 +220,13 @@ struct AgentSession: Identifiable, Equatable, Sendable {
     now.timeIntervalSince(updatedAt) <= 90 * 86_400
   }
 
+  /// Sessions needing you come first; everything else is ordered by most recent activity.
   static func priorityOrdered(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
-    if lhs.activity.sortOrder != rhs.activity.sortOrder {
-      return lhs.activity.sortOrder < rhs.activity.sortOrder
-    }
-    return lhs.updatedAt > rhs.updatedAt
-  }
-
-  /// Priority order with finished-but-unseen sessions promoted directly below NEEDS YOU.
-  static func displayOrdered(
-    _ sessions: [AgentSession],
-    unseenCompletions: Set<String>
-  ) -> [AgentSession] {
-    func rank(_ session: AgentSession) -> Int {
-      if session.activity == .attention { return 0 }
-      if session.activity == .ready && unseenCompletions.contains(session.id) { return 1 }
-      return session.activity.sortOrder + 1
-    }
-    return sessions.sorted { lhs, rhs in
-      let left = rank(lhs)
-      let right = rank(rhs)
-      return left != right ? left < right : priorityOrdered(lhs, rhs)
-    }
+    let lhsNeedsYou = lhs.activity == .attention
+    let rhsNeedsYou = rhs.activity == .attention
+    if lhsNeedsYou != rhsNeedsYou { return lhsNeedsYou }
+    if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+    return lhs.id < rhs.id
   }
 }
 

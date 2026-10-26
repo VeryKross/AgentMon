@@ -691,12 +691,12 @@ func classifiesDormantQuestionByWorkspaceAvailability(age: TimeInterval) {
   }
 
   let sessions = [
+    session("working-earlier", .working, updatedAt: now.addingTimeInterval(-60)),
     session("ready-now", .ready, updatedAt: now),
-    session("working-now", .working, updatedAt: now),
     session("waiting-yesterday", .attention, updatedAt: now.addingTimeInterval(-86_400)),
   ].sorted(by: AgentSession.priorityOrdered)
 
-  #expect(sessions.map(\.id) == ["waiting-yesterday", "working-now", "ready-now"])
+  #expect(sessions.map(\.id) == ["waiting-yesterday", "ready-now", "working-earlier"])
 }
 
 @Test func badCatAgentHookOnlyInputWaitAfterCompletedFusionRemainsAttention() {
@@ -727,25 +727,30 @@ func classifiesDormantQuestionByWorkspaceAvailability(age: TimeInterval) {
   let now = Date.now
   let pc = AgentHost(id: "pc", name: "Windows Desktop", platform: .windows, isLocal: false)
   let mac = AgentHost(id: "local", name: "Mac Mini", platform: .macOS, isLocal: true)
-  func session(_ id: String, _ activity: AgentActivity, host: AgentHost) -> AgentSession {
+  func session(_ id: String, _ activity: AgentActivity, host: AgentHost, age: TimeInterval)
+    -> AgentSession
+  {
     AgentSession(
       id: id, project: "BadCatAgent", task: "Collaborative work",
       repository: "VeryKross/BadCatAgent", branch: host.isLocal ? "mac-work" : "windows-work",
-      activity: activity, updatedAt: now
+      activity: activity, updatedAt: now.addingTimeInterval(-age)
     ).assigning(host: host)
   }
 
-  let local = [session("shared-id", .working, host: mac), session("ready", .ready, host: mac)]
+  let local = [
+    session("shared-id", .working, host: mac, age: 0),
+    session("ready", .ready, host: mac, age: 10),
+  ]
   let remote = RelaySnapshot(
     protocolVersion: 1, relayVersion: "0.2.5", generatedAt: now,
     host: .init(id: pc.id, name: pc.name, platform: pc.platform),
     sessions: [
       .init(id: "shared-id", project: "BadCatAgent", task: "Collaborative work",
         repository: "VeryKross/BadCatAgent", branch: "windows-work",
-        activity: .attention, updatedAt: now),
+        activity: .attention, updatedAt: now.addingTimeInterval(-30)),
       .init(id: "ready", project: "BadCatAgent", task: "Collaborative work",
         repository: "VeryKross/BadCatAgent", branch: "windows-work",
-        activity: .offline, updatedAt: now),
+        activity: .offline, updatedAt: now.addingTimeInterval(-20)),
     ]
   ).agentSessions()
   let merged = AgentSession.merged(local: local, remote: remote, now: now)
@@ -758,7 +763,7 @@ func classifiesDormantQuestionByWorkspaceAvailability(age: TimeInterval) {
   var tracker = SessionActivityTracker()
   tracker.update(with: merged)
   let updated = AgentSession.merged(
-    local: [session("shared-id", .ready, host: mac), session("ready", .ready, host: mac)],
+    local: [session("shared-id", .ready, host: mac, age: 0), session("ready", .ready, host: mac, age: 10)],
     remote: remote, now: now
   )
   tracker.update(with: updated)
@@ -983,20 +988,21 @@ private func trackedSession(
   #expect(Set(tracker.events.map(\.id)).count == SessionActivityTracker.eventLimit)
 }
 
-@Test func ordersUnseenCompletionsDirectlyBelowAttention() {
+@Test func ordersNeedsYouFirstThenMostRecentActivity() {
   let now = Date.now
   let sessions = [
-    trackedSession("ready", .ready, updatedAt: now),
-    trackedSession("working", .working, updatedAt: now),
-    trackedSession("done", .ready, updatedAt: now.addingTimeInterval(-600)),
-    trackedSession("asleep", .offline, updatedAt: now),
-    trackedSession("waiting", .attention, updatedAt: now),
-  ]
-  let ordered = AgentSession.displayOrdered(sessions, unseenCompletions: ["done"])
-  #expect(ordered.map(\.id) == ["waiting", "done", "working", "ready", "asleep"])
+    trackedSession("done-5h", .ready, updatedAt: now.addingTimeInterval(-18_000)),
+    trackedSession("working-pc", .working, updatedAt: now.addingTimeInterval(-10)),
+    trackedSession("asleep-now", .offline, updatedAt: now),
+    trackedSession("waiting-old", .attention, updatedAt: now.addingTimeInterval(-86_400)),
+    trackedSession("waiting-new", .attention, updatedAt: now.addingTimeInterval(-60)),
+    trackedSession("tie-b", .ready, updatedAt: now.addingTimeInterval(-30)),
+    trackedSession("tie-a", .working, updatedAt: now.addingTimeInterval(-30)),
+  ].sorted(by: AgentSession.priorityOrdered)
   #expect(
-    AgentSession.displayOrdered(sessions, unseenCompletions: []).map(\.id)
-      == ["waiting", "working", "ready", "done", "asleep"])
+    sessions.map(\.id) == [
+      "waiting-new", "waiting-old", "asleep-now", "working-pc", "tie-a", "tie-b", "done-5h",
+    ])
 }
 
 @Test func formatsDurations() {
@@ -1115,6 +1121,46 @@ private func trackedSession(
     let png = try #require(bitmap.representation(using: .png, properties: [:]))
     try png.write(to: URL(fileURLWithPath: path), options: .atomic)
   }
+}
+
+@Test func choosesNonMenuBarScreenAsSecondary() {
+  #expect(DashboardWindowController.secondary(of: ["main", "wokyis"]) == "wokyis")
+  #expect(DashboardWindowController.secondary(of: ["main", "second", "third"]) == "second")
+  #expect(DashboardWindowController.secondary(of: ["main"]) == nil)
+  #expect(DashboardWindowController.secondary(of: [String]()) == nil)
+}
+
+@Test @MainActor func drawsTemplateMenuBarIcon() throws {
+  let icon = MenuBarIcon.image
+  #expect(icon.isTemplate)
+  #expect(icon.size == NSSize(width: 18, height: 18))
+  guard let outputPath = ProcessInfo.processInfo.environment["AGENTMON_MENU_ICON_SNAPSHOT"] else {
+    return
+  }
+  let scales: [CGFloat] = [1, 2, 8]
+  let width = scales.reduce(0) { $0 + 18 * $1 + 12 } + 12
+  let height: CGFloat = 18 * 8 + 24
+  let sheet = NSImage(size: NSSize(width: width, height: height * 2))
+  sheet.lockFocus()
+  for (row, (background, ink)) in [(NSColor.white, NSColor.black), (NSColor.black, NSColor.white)].enumerated() {
+    background.setFill()
+    NSRect(x: 0, y: CGFloat(row) * height, width: width, height: height).fill()
+    var x: CGFloat = 12
+    for scale in scales {
+      let tinted = NSImage(size: NSSize(width: 18 * scale, height: 18 * scale), flipped: false) { rect in
+        icon.draw(in: rect)
+        ink.set()
+        rect.fill(using: .sourceIn)
+        return true
+      }
+      tinted.draw(in: NSRect(x: x, y: CGFloat(row) * height + 12, width: 18 * scale, height: 18 * scale))
+      x += 18 * scale + 12
+    }
+  }
+  sheet.unlockFocus()
+  let tiff = try #require(sheet.tiffRepresentation)
+  let png = try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+  try png.write(to: URL(fileURLWithPath: outputPath))
 }
 
 @Test func mapsWeatherCodes() {
